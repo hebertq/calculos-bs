@@ -56,7 +56,7 @@ BEGIN
             horas_ordinarias, 
             horas_extras
         FROM 
-            calcular_horas_laborales(hora_entrada, hora_salida);
+            calcular_horas_laborales(hora_entrada, hora_salida,tiempo_comida);
     END IF;
 
     -- Extraer año y mes de la hora de entrada
