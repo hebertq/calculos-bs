@@ -1,0 +1,39 @@
+CREATE OR REPLACE FUNCTION calcular_campos_marcacion()
+RETURNS TRIGGER AS $$
+DECLARE
+    horas RECORD;
+BEGIN
+    -- Verificar que check_in no sea nulo
+    IF NEW.check_in IS NULL THEN
+        RAISE EXCEPTION 'La hora de entrada (check_in) no puede ser nula.';
+    END IF;
+
+    -- Calcular las horas laborales utilizando la función calcular_horas_laborales
+    SELECT horas_laborales, horas_extras, duracion_jornada
+    INTO horas_laborales_result
+    FROM calcular_horas_laborales(NEW.check_in, NEW.check_out, NEW.x_meal_time);
+
+    NEW.worked_hours := horas.horas_laborales;
+    NEW.overtime_hours := horas.horas_extras;
+    NEW.validated_overtime_hours := horas.horas_extras; -- Asumimos validación automática
+    NEW.expected_hours := horas.horas_laborales + horas.horas_extras; -- Usamos la duración total como horas esperadas
+
+    -- Calcular año y mes de la marcación
+    NEW.x_anio := EXTRACT(YEAR FROM NEW.check_in);
+    NEW.x_mes := EXTRACT(MONTH FROM NEW.check_in);
+
+    -- Calcular el día laborado (proporcional a las horas trabajadas esperadas)
+    IF NEW.worked_hours > 0 THEN
+        NEW.x_worked_day := NEW.worked_hours /  horas.duracion_jornada;
+    ELSE
+        NEW.x_worked_day := 0;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER calcular_campos_attendance
+BEFORE INSERT OR UPDATE ON public.hr_attendance
+FOR EACH ROW
+EXECUTE FUNCTION calcular_campos_marcacion();
