@@ -1,0 +1,117 @@
+CREATE OR REPLACE FUNCTION registrar_marcaciones_multiples(
+    empleados_ids VARCHAR,  -- Cadena con los IDs de los empleados separados por comas
+    hora_entrada TIMESTAMP,
+    hora_salida TIMESTAMP,
+    bono_cumplimiento NUMERIC DEFAULT 0,
+    tiempo_comida NUMERIC DEFAULT 0,
+    pagar_como_extra BOOLEAN DEFAULT FALSE,
+    company_id INTEGER DEFAULT 1,
+    es_doble_turno BOOLEAN DEFAULT FALSE,
+    hora_entrada_turno2 TIMESTAMP DEFAULT NULL,
+    hora_salida_turno2 TIMESTAMP DEFAULT NULL,
+    tiempo_comida_turno2 NUMERIC DEFAULT 0,
+    bono_cumplimiento_turno2 NUMERIC DEFAULT 0,
+    pagar_como_extra_turno2 BOOLEAN DEFAULT FALSE
+)
+RETURNS VOID AS $$
+DECLARE
+    empleado_id INTEGER;
+    id_array INTEGER[];
+    i INTEGER;
+    clean_empleados_ids VARCHAR;
+BEGIN
+    -- Validar los parámetros de entrada
+    IF empleados_ids IS NULL OR empleados_ids = '' THEN
+        RAISE EXCEPTION 'La lista de IDs de empleados es obligatoria.';
+    END IF;
+    IF hora_entrada IS NULL AND hora_salida IS NULL THEN
+        RAISE EXCEPTION 'Se debe proporcionar al menos la hora de entrada o la hora de salida.';
+    END IF;
+    IF bono_cumplimiento IS NULL THEN
+        RAISE EXCEPTION 'El bono de cumplimiento no puede ser nulo.';
+    END IF;
+    IF tiempo_comida IS NULL THEN
+        RAISE EXCEPTION 'El tiempo de comida no puede ser nulo.';
+    END IF;
+    IF es_doble_turno AND (hora_entrada_turno2 IS NULL OR hora_salida_turno2 IS NULL) THEN
+        RAISE EXCEPTION 'Para doble turno, se debe proporcionar hora_entrada_turno2 y hora_salida_turno2.';
+    END IF;
+    IF es_doble_turno AND tiempo_comida_turno2 IS NULL THEN
+        RAISE EXCEPTION 'Para doble turno, se debe proporcionar tiempo_comida_turno2.';
+    END IF;
+    IF es_doble_turno AND bono_cumplimiento_turno2 IS NULL THEN
+        RAISE EXCEPTION 'Para doble turno, se debe proporcionar bono_cumplimiento_turno2.';
+    END IF;
+
+    -- Limpiar la cadena de IDs de empleados
+    clean_empleados_ids := regexp_replace(empleados_ids, ' +', ',', 'g');  -- Elimina espacios extra
+    clean_empleados_ids := regexp_replace(clean_empleados_ids, ',,+', ',', 'g'); -- Elimina comas repetidas
+    clean_empleados_ids := trim(clean_empleados_ids, ',');         -- Elimina comas al inicio y al final
+    clean_empleados_ids := regexp_replace(clean_empleados_ids, '[^0-9,]', '', 'g');  -- Elimina caracteres no numéricos ni comas
+
+    -- Convertir la cadena de IDs a un arreglo de enteros
+    id_array := string_to_array(clean_empleados_ids, ',');
+
+    -- Recorrer el arreglo de IDs e insertar las marcaciones
+    FOR i IN 1 ARRAY_LENGTH(id_array, 1) LOOP
+        empleado_id := id_array[i];
+
+        -- Validar que el empleado_id sea un entero válido
+        IF empleado_id IS NULL OR empleado_id <= 0 THEN
+            RAISE NOTICE 'Empleado ID: % no es valido, se omite', empleado_id;
+            CONTINUE;
+        END IF;
+
+        -- Validar que no exista una marcación en el mismo horario para el empleado
+        IF EXISTS (
+            SELECT 1
+            FROM attendance_attendance
+            WHERE employee_id = empleado_id
+              AND (
+                (check_in <= hora_entrada AND check_out >= hora_entrada) OR
+                (check_in <= hora_salida AND check_out >= hora_salida) OR
+                (check_in <= hora_entrada AND check_out >= hora_entrada) OR
+                (check_in <= hora_salida AND check_out  >= hora_salida) OR
+                (es_doble_turno AND (
+                    (check_in <= hora_entrada_turno2 AND check_out >= hora_entrada_turno2) OR
+                    (check_in <= hora_salida_turno2 AND check_out >= hora_salida_turno2) OR
+                    (check_in <= hora_entrada_turno2 AND check_out >= hora_entrada_turno2) OR
+                    (check_in <= hora_salida_turno2 AND check_out  >= hora_salida_turno2)
+                ))
+              )
+          ) THEN
+            RAISE NOTICE 'Ya existe una marcación para el empleado ID: % en el horario especificado, se omite', empleado_id;
+            CONTINUE;
+        END IF;
+
+        -- Llamar a la función registrar_marcacion_x_id para insertar la marcación
+        PERFORM registrar_marcacion_x_id(
+            empleado_id => empleado_id,
+            hora_entrada => hora_entrada,
+            hora_salida => hora_salida,
+            bono_cumplimiento => bono_cumplimiento,
+            tiempo_comida => tiempo_comida,
+            pagar_como_extra => pagar_como_extra,
+            company_id => company_id
+        );
+        
+        IF es_doble_turno THEN
+             PERFORM registrar_marcacion_x_id(
+                empleado_id => empleado_id,
+                hora_entrada => hora_entrada_turno2,
+                hora_salida => hora_salida_turno2,
+                bono_cumplimiento => bono_cumplimiento_turno2,  -- Usar el bono del turno 2
+                tiempo_comida => tiempo_comida_turno2,
+                pagar_como_extra => pagar_como_extra_turno2, -- Pagar o no como extra el turno 2
+                company_id => company_id
+            );
+        END IF;
+
+    END LOOP;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Manejar cualquier error que ocurra durante la inserción
+        RAISE EXCEPTION 'Error al agregar las marcaciones: %', SQLERRM;
+END;
+$$ LANGUAGE plpgsql;
