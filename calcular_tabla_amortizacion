@@ -1,0 +1,88 @@
+CREATE OR REPLACE FUNCTION calcular_tabla_amortizacion_frances(
+    monto_prestamo NUMERIC,
+    tasa_interes NUMERIC,
+    plazo_meses INTEGER,
+    frecuencia_pago INTEGER DEFAULT 1  -- 1: Mensual, 2: Quincenal
+)
+RETURNS TABLE (
+    periodo INTEGER,
+    fecha_pago DATE,
+    cuota NUMERIC,
+    interes NUMERIC,
+    amortizacion NUMERIC,
+    saldo NUMERIC
+) AS $$
+DECLARE
+    cuota_fija NUMERIC;
+    tasa_periodica NUMERIC;
+    numero_pagos INTEGER;
+    fecha_inicial DATE;
+    saldo_actual NUMERIC;
+    i INTEGER;
+BEGIN
+    -- Validar los parámetros de entrada
+    IF monto_prestamo <= 0 THEN
+        RAISE EXCEPTION 'El monto del préstamo debe ser mayor que cero.';
+    END IF;
+    IF tasa_interes < 0 THEN
+        RAISE EXCEPTION 'La tasa de interés debe ser mayor o igual a cero.';
+    END IF;
+    IF plazo_meses <= 0 THEN
+        RAISE EXCEPTION 'El plazo en meses debe ser mayor que cero.';
+    END IF;
+    IF frecuencia_pago NOT IN (1, 2) THEN
+        RAISE EXCEPTION 'La frecuencia de pago debe ser 1 (Mensual) o 2 (Quincenal).';
+    END IF;
+
+    -- Calcular el número de pagos
+    IF frecuencia_pago = 1 THEN
+        numero_pagos := plazo_meses;
+    ELSE
+        numero_pagos := plazo_meses * 2;
+    END IF;
+
+    -- Calcular la tasa de interés periódica
+    IF frecuencia_pago = 1 THEN
+        tasa_periodica := tasa_interes / 12;
+    ELSE
+        tasa_periodica := tasa_interes / 24;
+    END IF;
+
+    -- Calcular la cuota fija
+    cuota_fija := calcular_cuota_prestamo_frances(monto_prestamo, tasa_interes, plazo_meses, frecuencia_pago);
+    
+    -- Inicializar el saldo
+    saldo_actual := monto_prestamo;
+    
+    -- Calcular la fecha inicial de pago (un mes o una quincena después de la fecha actual)
+    fecha_inicial := CURRENT_DATE + INTERVAL '1 month';
+    IF frecuencia_pago = 2 THEN
+      fecha_inicial := CURRENT_DATE + INTERVAL '15 days';
+    END IF;
+
+    -- Generar la tabla de amortización
+    FOR i IN 1..numero_pagos LOOP
+        -- Calcular el interés del período
+        interes := saldo_actual * tasa_periodica;
+        
+        -- Calcular la amortización del período
+        amortizacion := cuota_fija - interes;
+        
+        -- Actualizar el saldo
+        saldo := saldo_actual - amortizacion;
+        
+        -- Devolver los valores del período actual
+        RETURN QUERY SELECT 
+            i AS periodo,
+            (fecha_inicial + (INTERVAL '1 month' * (i-1)))::DATE AS fecha_pago, -- Calcular la fecha de pago
+            cuota_fija AS cuota,
+            interes,
+            amortizacion,
+            saldo;
+            
+        saldo_actual := saldo;
+    END LOOP;
+
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;
