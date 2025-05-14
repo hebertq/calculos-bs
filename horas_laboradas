@@ -1,0 +1,36 @@
+CREATE OR REPLACE FUNCTION calcular_horas_laborales(
+    inicio_jornada TIMESTAMP,
+    fin_jornada TIMESTAMP
+)
+RETURNS TABLE (
+    duracion_jornada NUMERIC(5,2),
+    horas_laborales NUMERIC(5,2),
+    horas_extras NUMERIC(5,2)
+) AS $$
+DECLARE
+    jornada_laboral NUMERIC(5,2);
+BEGIN
+    -- Validar que la hora de fin sea posterior a la de inicio
+    IF fin_jornada < inicio_jornada THEN
+        RAISE EXCEPTION 'La hora de fin de jornada debe ser posterior a la hora de inicio.';
+    END IF;
+
+    -- Calcular la duración total de la jornada en horas
+    duracion_jornada := EXTRACT(EPOCH FROM (fin_jornada - inicio_jornada)) / 3600;
+
+    -- Determinar la jornada laboral: 8 horas si el inicio es antes de las 5 PM, 7 en caso contrario
+    jornada_laboral := CASE 
+        WHEN inicio_jornada::TIME < '17:00:00' AND inicio_jornada::TIME >= '04:00:00' THEN 8
+        ELSE 7
+    END;
+
+    -- Calcular las horas extras (no negativas)
+    horas_extras := GREATEST(duracion_jornada - jornada_laboral, 0);
+
+    -- Calcular las horas laborales (no exceder la jornada laboral)
+    horas_laborales := LEAST(duracion_jornada, jornada_laboral);
+
+    RETURN QUERY 
+        SELECT duracion_jornada, horas_laborales, horas_extras;
+END;
+$$ LANGUAGE plpgsql;
