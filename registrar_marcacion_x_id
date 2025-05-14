@@ -75,13 +75,15 @@ BEGIN
     END IF;
     -- Insertar la nueva marcación en la tabla attendance_attendance (nombre de tabla de Odoo)
     -- y obtener el ID de la marcación insertada usando INSERT ... VALUES
-    INSERT INTO attendance_attendance (
+    INSERT INTO public.hr_attendance (
         employee_id,
         check_in,
         check_out,
         company_id,
-        horas_ordinarias,
-        horas_extras,
+        expected_hours,
+        worked_hours,
+        overtime_hours,
+        validated_overtime_hours,
         anio,
         mes,
         bono_cumplimiento,
@@ -92,7 +94,9 @@ BEGIN
         hora_entrada,
         hora_salida,
         company_id,
+        horas_ordinarias + horas_extras,
         horas_ordinarias,
+        horas_extras,
         horas_extras,
         anio_marcacion,
         mes_marcacion,
