@@ -5,7 +5,7 @@ CREATE OR REPLACE FUNCTION registrar_marcacion_x_id(
     hora_salida TIMESTAMP,
     bono_cumplimiento NUMERIC DEFAULT 0,
     tiempo_comida NUMERIC DEFAULT 0,
-    pagar_como_extra BOOLEAN DEFAULT FALSE,  -- Nuevo parámetro: indicar si se paga como extra
+    pagar_como_extra BOOLEAN DEFAULT FALSE,  
     company_id INTEGER DEFAULT 1
 )
 RETURNS INTEGER AS $$  -- Devuelve el ID de la marcación creada
@@ -79,16 +79,16 @@ BEGIN
         employee_id,
         check_in,
         check_out,
-        company_id,
+        department_id,
         expected_hours,
         worked_hours,
         overtime_hours,
         validated_overtime_hours,
-        anio,
-        mes,
-        bono_cumplimiento,
-        tiempo_comida,
-        dia_laborado  -- Insertar el día laborado
+        x_anio,
+        x_mes,
+        x_daily_bonus,
+        x_meal_time,
+        x_worked_day  
     ) VALUES (
         empleado_id,
         hora_entrada,
