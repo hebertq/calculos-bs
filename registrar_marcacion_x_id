@@ -11,6 +11,7 @@ CREATE OR REPLACE FUNCTION registrar_marcacion_x_id(
 RETURNS INTEGER AS $$  -- Devuelve el ID de la marcación creada
 DECLARE
     marcacion_id INTEGER;
+    employee_number integer,
 BEGIN
     -- Validar los parámetros de entrada
     IF empleado_id IS NULL THEN
@@ -26,10 +27,14 @@ BEGIN
         RAISE EXCEPTION 'El tiempo de comida no puede ser nulo.';
     END IF;
 
+    select id into employee_number
+    from public.hr_employee
+    where x_employee_number = empleado_id;
+
     -- Validar que no exista una marcación en el mismo horario para el empleado
     SELECT id INTO marcacion_id
     FROM attendance_attendance
-    WHERE employee_id = empleado_id
+    WHERE employee_id = employee_number
       AND (
         (check_in <= hora_entrada AND check_out >= hora_entrada) OR
         (check_in <= hora_salida AND check_out >= hora_salida) OR
@@ -51,7 +56,7 @@ BEGIN
         x_daily_bonus,
         x_meal_time,
     ) VALUES (
-        empleado_id,
+        employee_number,
         hora_entrada,
         hora_salida,
         company_id,
