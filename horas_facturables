@@ -1,0 +1,47 @@
+REATE OR REPLACE FUNCTION calcular_horas_facturables(
+    inicio_jornada TIMESTAMP,
+    fin_jornada TIMESTAMP,
+    calcular_horas BOOLEAN DEFAULT TRUE
+)
+RETURNS TABLE (
+    horas_ordinarias NUMERIC(5,2),
+    horas_extras NUMERIC(5,2)
+) AS $$
+DECLARE
+    horas_diurnas NUMERIC(5,2);
+    horas_nocturnas NUMERIC(5,2);
+    duracion_jornada NUMERIC(5,2);
+BEGIN
+    -- Validar que la hora de fin sea posterior a la de inicio
+    IF fin_jornada < inicio_jornada THEN
+        RAISE EXCEPTION 'La hora de fin de jornada debe ser posterior a la hora de inicio.';
+    END IF;
+
+    IF calcular_horas THEN
+        -- Calcular la duración total de la jornada en horas
+        duracion_jornada := EXTRACT(EPOCH FROM (fin_jornada - inicio_jornada)) / 3600;
+
+        -- Calcular horas diurnas (07:00 a 18:00)
+        horas_diurnas := LEAST(
+            GREATEST(EXTRACT(EPOCH FROM (LEAST(fin_jornada, '18:00:00'::TIME) - GREATEST(inicio_jornada, '07:00:00'::TIME))) / 3600, 0),
+            duracion_jornada
+        );
+
+        -- Calcular horas nocturnas (fuera de 07:00 a 18:00)
+        horas_nocturnas := duracion_jornada - horas_diurnas;
+
+        -- Asignar horas ordinarias y extras
+        horas_ordinarias := horas_diurnas;
+        horas_extras := horas_nocturnas;
+        
+    ELSE
+        -- Llamar a la función calcular_horas_laborales
+        SELECT horas_laborales, horas_extras
+        INTO horas_ordinarias, horas_extras
+        FROM calcular_horas_laborales(inicio_jornada, fin_jornada);        
+    END IF;
+
+    RETURN QUERY 
+        SELECT  horas_ordinarias, horas_extras;
+END;
+$$ LANGUAGE plpgsql;
