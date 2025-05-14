@@ -1,0 +1,76 @@
+CREATE OR REPLACE FUNCTION registrar_marcaciones_multiples_json(
+    data JSONB
+)
+RETURNS VOID AS $$
+DECLARE
+    empleado_id INTEGER;
+    hora_entrada TIMESTAMP;
+    hora_salida TIMESTAMP;
+    bono_cumplimiento NUMERIC;
+    tiempo_comida NUMERIC;
+    pagar_como_extra BOOLEAN;
+    company_id INTEGER;
+    registro JSONB;
+    marcacion_existente INTEGER;
+BEGIN
+    -- Validar que el JSON de entrada no esté vacío
+    IF data IS NULL OR jsonb_array_length(data) = 0 THEN
+        RAISE EXCEPTION 'El JSON de entrada no puede estar vacío.';
+    END IF;
+
+    -- Iterar sobre cada objeto en el array JSON
+    FOR registro IN SELECT * FROM jsonb_array_elements(data) LOOP
+        -- Extraer los valores de cada registro
+        empleado_id := (registro ->> 'empleado_id')::INTEGER;
+        hora_entrada := (registro ->> 'hora_entrada')::TIMESTAMP;
+        hora_salida := (registro ->> 'hora_salida')::TIMESTAMP;
+        bono_cumplimiento := COALESCE((registro ->> 'bono_cumplimiento')::NUMERIC, 0);
+        tiempo_comida := COALESCE((registro ->> 'tiempo_comida')::NUMERIC, 0);
+        pagar_como_extra := COALESCE((registro ->> 'pagar_como_extra')::BOOLEAN, FALSE);
+        company_id := COALESCE((registro ->> 'company_id')::INTEGER, 1);
+
+        -- Validar los parámetros del registro individual
+        IF empleado_id IS NULL THEN
+            RAISE NOTICE 'Empleado ID no proporcionado en registro: %', registro;
+            CONTINUE;
+        END IF;
+        IF hora_entrada IS NULL AND hora_salida IS NULL THEN
+            RAISE NOTICE 'Se debe proporcionar al menos la hora de entrada o la hora de salida en registro: %', registro;
+            CONTINUE;
+        END IF;
+
+        -- Validar que no exista una marcación en el mismo horario para el empleado
+        SELECT id INTO marcacion_existente
+        FROM attendance_attendance
+        WHERE employee_id = empleado_id
+          AND (
+            (check_in <= hora_entrada AND check_out >= hora_entrada) OR
+            (check_in <= hora_salida AND check_out >= hora_salida) OR
+            (check_in <= hora_entrada AND check_out >= hora_entrada) OR
+            (check_in <= hora_salida AND check_out  >= hora_salida)
+          );
+
+        IF marcacion_existente IS NOT NULL THEN
+            RAISE NOTICE 'Ya existe una marcación para el empleado ID: % en el horario especificado del registro: %', empleado_id, registro;
+            CONTINUE;
+        END IF;
+
+        -- Llamar a la función registrar_marcacion_x_id para insertar la marcación
+        PERFORM registrar_marcacion_x_id(
+            empleado_id => empleado_id,
+            hora_entrada => hora_entrada,
+            hora_salida => hora_salida,
+            bono_cumplimiento => bono_cumplimiento,
+            tiempo_comida => tiempo_comida,
+            pagar_como_extra => pagar_como_extra,
+            company_id => company_id
+        );
+
+    END LOOP;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Manejar cualquier error que ocurra durante la inserción
+        RAISE EXCEPTION 'Error al agregar las marcaciones: %', SQLERRM;
+END;
+$$ LANGUAGE plpgsql;
