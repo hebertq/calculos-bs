@@ -11,12 +11,6 @@ CREATE OR REPLACE FUNCTION registrar_marcacion_x_id(
 RETURNS INTEGER AS $$  -- Devuelve el ID de la marcación creada
 DECLARE
     marcacion_id INTEGER;
-    horas_ordinarias NUMERIC(5,2);
-    horas_extras NUMERIC(5,2);
-    anio_marcacion INTEGER;
-    mes_marcacion INTEGER;
-    dia_laborado NUMERIC; -- Nueva variable para el día laborado
-    duracion_jornada  NUMERIC(5,2);
 BEGIN
     -- Validar los parámetros de entrada
     IF empleado_id IS NULL THEN
@@ -43,66 +37,26 @@ BEGIN
         (check_in <= hora_salida AND check_out  >= hora_salida)
       );
       
-    IF marcacion_existente IS NOT NULL THEN
+    IF marcacion_id IS NOT NULL THEN
         RAISE EXCEPTION 'Ya existe una marcación para este empleado en el horario especificado.';
     END IF;
 
-    -- Calcular horas ordinarias y extras
-    SELECT 
-        horas_laborales, 
-        horas_extras,
-        duracion_jornada
-    INTO 
-        horas_ordinarias, 
-        horas_extras,
-        duracion_jornada
-    FROM 
-        calcular_horas_laborales(hora_entrada, hora_salida, tiempo_comida);
-
-    IF pagar_como_extra THEN
-        horas_extras := horas_extras + duracion_jornada;
-        horas_ordinarias := 0;
-        
-    END IF;
-
-    -- Extraer año y mes de la hora de entrada
-    anio_marcacion := EXTRACT(YEAR FROM hora_entrada);
-    mes_marcacion := EXTRACT(MONTH FROM hora_entrada);
-    IF horas_ordinarias = 0 THEN
-        dia_laborado := 0;
-    ELSE
-        dia_laborado  := horas_ordinarias / duracion_jornada;
-    END IF;
     -- Insertar la nueva marcación en la tabla attendance_attendance (nombre de tabla de Odoo)
     -- y obtener el ID de la marcación insertada usando INSERT ... VALUES
     INSERT INTO public.hr_attendance (
         employee_id,
         check_in,
         check_out,
-        department_id,
-        expected_hours,
-        worked_hours,
-        overtime_hours,
-        validated_overtime_hours,
-        x_anio,
-        x_mes,
+        department_id,       
         x_daily_bonus,
         x_meal_time,
-        x_worked_day  
     ) VALUES (
         empleado_id,
         hora_entrada,
         hora_salida,
         company_id,
-        horas_ordinarias + horas_extras,
-        horas_ordinarias,
-        horas_extras,
-        horas_extras,
-        anio_marcacion,
-        mes_marcacion,
         bono_cumplimiento,
-        tiempo_comida,
-        dia_laborado
+        tiempo_comida
     )
     RETURNING id INTO marcacion_id;
 
