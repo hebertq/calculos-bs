@@ -1,0 +1,87 @@
+CREATE OR REPLACE FUNCTION agregar_empleado(
+    nombre VARCHAR,
+    apellido VARCHAR,
+    departamento_id INTEGER,
+    job_id INTEGER,
+    manager_id INTEGER,
+    fecha_inicio_contrato DATE,
+    tipo_contrato VARCHAR,  -- 'CDI', 'CDD', etc.
+    salario NUMERIC,
+    company_id INTEGER DEFAULT 1,
+    struct_id INTEGER DEFAULT 1  -- Agregar este parámetro para la estructura salarial
+)
+RETURNS INTEGER AS $$  -- Devuelve el ID del empleado creado
+DECLARE
+    empleado_id INTEGER;
+    contract_id INTEGER;
+BEGIN
+    -- Validar los parámetros de entrada
+    IF nombre IS NULL OR apellido IS NULL THEN
+        RAISE EXCEPTION 'El nombre y el apellido del empleado son obligatorios.';
+    END IF;
+    IF departamento_id IS NULL THEN
+        RAISE EXCEPTION 'El departamento_id del empleado es obligatorio.';
+    END IF;
+     IF job_id IS NULL THEN
+        RAISE EXCEPTION 'El job_id del empleado es obligatorio.';
+    END IF;
+    IF fecha_inicio_contrato IS NULL THEN
+        RAISE EXCEPTION 'La fecha de inicio del contrato es obligatoria.';
+    END IF;
+    IF tipo_contrato IS NULL THEN
+        RAISE EXCEPTION 'El tipo de contrato es obligatorio.';
+    END IF;
+    IF salario IS NULL OR salario <= 0 THEN
+        RAISE EXCEPTION 'El salario debe ser un número mayor que cero.';
+    END IF;
+    IF struct_id IS NULL THEN
+        RAISE EXCEPTION 'El struct_id de la estructura salarial es obligatorio.';
+    END IF;
+
+    -- Insertar el nuevo empleado en la tabla hr_employee
+    INSERT INTO hr_employee (
+        name,
+        job_id,
+        department_id,
+        manager_id,
+        company_id
+    ) VALUES (
+        nombre || ' ' || apellido,  -- Combinar nombre y apellido
+        job_id,
+        departamento_id,
+        manager_id,
+        company_id
+    )
+    RETURNING id INTO empleado_id;  -- Obtener el ID del empleado insertado
+
+    -- Insertar el contrato del empleado en la tabla hr_contract
+    INSERT INTO hr_contract (
+        name,
+        employee_id,
+        date_start,
+        type,
+        wage,
+        state,
+        company_id,
+        struct_id -- Agregar la estructura salarial al contrato
+    ) VALUES (
+        'Contrato de ' || nombre || ' ' || apellido,  -- Nombre del contrato
+        empleado_id,
+        fecha_inicio_contrato,
+        tipo_contrato,
+        salario,
+        'open',  -- Estado del contrato: open, close, pending
+        company_id,
+        struct_id
+    )
+    RETURNING id INTO contract_id;
+
+    -- Devolver el ID del empleado creado
+    RETURN empleado_id;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Manejar cualquier error que ocurra durante la inserción
+        RAISE EXCEPTION 'Error al agregar empleado y contrato: %', SQLERRM;
+END;
+$$ LANGUAGE plpgsql;
