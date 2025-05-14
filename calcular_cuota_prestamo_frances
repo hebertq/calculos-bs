@@ -1,0 +1,50 @@
+CREATE OR REPLACE FUNCTION calcular_cuota_prestamo_frances(
+    monto_prestamo NUMERIC,
+    tasa_interes NUMERIC,
+    plazo_meses INTEGER,
+    frecuencia_pago INTEGER DEFAULT 1  -- 1: Mensual, 2: Quincenal
+)
+RETURNS NUMERIC AS $$
+DECLARE
+    cuota NUMERIC;
+    tasa_periodica NUMERIC;
+    numero_pagos INTEGER;
+BEGIN
+    -- Validar los parámetros de entrada
+    IF monto_prestamo <= 0 THEN
+        RAISE EXCEPTION 'El monto del préstamo debe ser mayor que cero.';
+    END IF;
+    IF tasa_interes < 0 THEN
+        RAISE EXCEPTION 'La tasa de interés debe ser mayor o igual a cero.';
+    END IF;
+    IF plazo_meses <= 0 THEN
+        RAISE EXCEPTION 'El plazo en meses debe ser mayor que cero.';
+    END IF;
+    IF frecuencia_pago NOT IN (1, 2) THEN
+        RAISE EXCEPTION 'La frecuencia de pago debe ser 1 (Mensual) o 2 (Quincenal).';
+    END IF;
+
+    -- Calcular el número de pagos
+    IF frecuencia_pago = 1 THEN
+        numero_pagos := plazo_meses;
+    ELSE
+        numero_pagos := plazo_meses * 2;
+    END IF;
+
+    -- Calcular la tasa de interés periódica
+    IF frecuencia_pago = 1 THEN
+        tasa_periodica := tasa_interes / 12;
+    ELSE  -- Quincenal
+        tasa_periodica := tasa_interes / 24;
+    END IF;
+
+    -- Calcular la cuota utilizando la fórmula de la cuota francesa
+    IF tasa_periodica = 0 THEN
+        cuota := monto_prestamo / numero_pagos;
+    ELSE
+        cuota := (monto_prestamo * tasa_periodica) / (1 - (1 + tasa_periodica)^(-numero_pagos));
+    END IF;
+
+    RETURN ROUND(cuota, 2);  -- Redondear a 2 decimales
+END;
+$$ LANGUAGE plpgsql;
