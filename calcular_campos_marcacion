@@ -10,7 +10,7 @@ BEGIN
 
     -- Calcular las horas laborales utilizando la función calcular_horas_laborales
     SELECT horas_laborales, horas_extras, duracion_jornada
-    INTO horas_laborales_result
+    INTO horas
     FROM calcular_horas_laborales(NEW.check_in, NEW.check_out, NEW.x_meal_time);
 
     NEW.worked_hours := horas.horas_laborales;
