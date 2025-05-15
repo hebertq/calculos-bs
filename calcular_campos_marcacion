@@ -19,8 +19,8 @@ BEGIN
     NEW.expected_hours := horas.horas_laborales + horas.horas_extras; -- Usamos la duración total como horas esperadas
 
     -- Calcular año y mes de la marcación
-    NEW.x_anio := EXTRACT(YEAR FROM NEW.check_in);
-    NEW.x_mes := EXTRACT(MONTH FROM NEW.check_in);
+    NEW.x_years := EXTRACT(YEAR FROM NEW.check_in);
+    NEW.x_month := EXTRACT(MONTH FROM NEW.check_in);
 
     -- Calcular el día laborado (proporcional a las horas trabajadas esperadas)
     IF NEW.worked_hours > 0 THEN
