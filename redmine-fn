@@ -239,7 +239,7 @@ BEGIN
     v_tipoaucencia := r_custom.cf_55);
 
 	SELECT * INTO r_error FROM dblink('localhost-redmine',
-			format('SELECT addausencias(''%s'',''%s'',''%s'',''%s'',''%s'',''%s'',''%s'',''%s'',''%s'') AS id',
+			format('select add_absence_request(''%s'',''%s'',''%s'',''%s'',''%s'',''%s'',''%s'',''%s'',''%s'') AS id',
 				4,
 				v_tipoid,          
 				p_new.id,
@@ -307,7 +307,7 @@ BEGIN
 	
     -- Llamar a dblink con los datos extraídos
     SELECT * INTO vi_empleado FROM dblink('localhost-redmine',
-        format('SELECT agregar_empleado(''%s'',''%s'',''%s'',''%s'',''%s'',''%s'', 
+        format('SELECT add_employee_hire(''%s'',''%s'',''%s'',''%s'',''%s'',''%s'', 
 										''%s'',''%s'',''%s'',''%s'',''%s'',''%s'',
 										''%s'',''%s'',''%s'',''%s'',''%s'',''%s'') AS id',
             v_nombre,          -- nombre
@@ -353,7 +353,7 @@ BEGIN
 
     SELECT * INTO r_error
     FROM dblink('localhost-redmine',
-                'SELECT public.addbajaempleado('''||v_empleado||''') AS id') AS sub(id INTEGER);
+                'SELECT public.add_employee_termination(''%s'',''%s'') AS id',vi_empleado,p_new.id) AS sub(id INTEGER);
 
    RETURN r_error;
 END;
@@ -413,12 +413,12 @@ BEGIN
     SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
 	
 	v_descripcion := p_new.description;
-    v_fecha := p_new.start_date;
-    v_horaini := r_custom.cf_14;
-    v_horafin := r_custom.cf_15;
-    v_doblet := r_custom.cf_32::BOOLEAN;
-    v_horaini2 := r_custom.cf_33;
-    v_horafin2 := r_custom.cf_34;
+    v_fecha       := p_new.start_date;
+    v_horaini     := r_custom.cf_14;
+    v_horafin     := r_custom.cf_15;
+    v_doblet      := r_custom.cf_32::BOOLEAN;
+    v_horaini2    := r_custom.cf_33;
+    v_horafin2    := r_custom.cf_34;
     v_bnc := COALESCE(r_custom.cf_12::NUMERIC(10,2), 0) +
              COALESCE(r_custom.cf_30::NUMERIC(10,2), 0) +
              COALESCE(r_custom.cf_35::NUMERIC(10,2), 0);
@@ -430,7 +430,7 @@ BEGIN
 
     SELECT * INTO r_error
     FROM dblink('localhost-redmine',
-                'SELECT public.addentradassalidas('''||v_descripcion||''','''||v_fecha||''',
+                'SELECT public.add_payroll_marking('''||v_descripcion||''','''||v_fecha||''',
                                              '''||v_horaini||''','''||v_horafin||''','||v_doblet||','''||v_horaini2||''','''||v_horafin2||
                                              ''','||v_bnc||','||v_halmuerzo||','||v_cena||','''||v_cliente||''','||v_pagar_extras||') AS id') AS sub(id INTEGER);
 
@@ -719,8 +719,6 @@ BEGIN
 END;
 $function$;
 
-66228
-1263
 
 
 
