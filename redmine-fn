@@ -1,0 +1,730 @@
+-- DROP FUNCTION public.process_daily_bonus(record);
+CREATE OR REPLACE FUNCTION public.process_daily_bonus(p_new record)
+ RETURNS record
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r_custom record;
+	r_error record;
+    vi_empleado integer;
+    v_fecha DATE;
+    v_bnc NUMERIC(10,2);
+    v_aplica BOOLEAN;
+BEGIN
+    -- Llama a la función pivot para obtener los campos personalizados como columnas dinámicas
+    SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
+	
+	vi_empleado := r_custom.cf_49;
+    v_fecha := p_new.start_date;
+    v_bnc := r_custom.cf_12::NUMERIC(10,2); -- Asumiendo el bono está en este campo
+    v_aplica := r_custom.cf_91::BOOLEAN;
+
+    IF v_aplica THEN
+		 -- Llamar a dblink con los datos extraídos
+		SELECT * INTO r_error FROM dblink('localhost-redmine',
+			format('SELECT add_daily_bonus(''%s'', ''%s'', ''%s'') AS id',
+				vi_empleado,          
+				v_fecha,        
+				v_bnc
+			)
+		) AS sub(id integer);        
+    END IF;
+
+    RETURN r_error;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.process_contract_hire(p_new record)
+ RETURNS record
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r_custom record;
+	r_error record;
+    vi_empleado integer;
+	v_nombre VARCHAR;
+    v_cliente VARCHAR;
+    v_area VARCHAR;
+    v_no_seguro VARCHAR;
+    v_cargo VARCHAR;
+    v_estrucsal VARCHAR;
+    v_salario NUMERIC;
+    v_fecha DATE;
+    v_tipocontra VARCHAR;
+    v_empleado VARCHAR;
+    v_empleado_id INTEGER := 0;
+BEGIN
+    -- Llama a la función pivot para obtener los campos personalizados como columnas dinámicas
+    SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
+	
+	v_nombre := r_custom.cf_50); -- Asumiendo que el nombre también es relevante aquí
+    v_cliente := r_custom.cf_1);
+    v_area := r_custom.cf_28);
+    v_no_seguro := r_custom.cf_42);
+    v_cargo := r_custom.cf_39);
+    v_estrucsal := r_custom.cf_51);
+    v_salario := r_custom.cf_52)::NUMERIC;
+    v_fecha := p_new.start_date;
+    v_tipocontra := r_custom.cf_58);
+    vi_empleado := r_custom.cf_49;
+
+    SELECT * INTO r_error FROM dblink('localhost-redmine',
+			format('SELECT add_contract_hire(''%s'', ''%s'', ''%s'',''%s'', ''%s'', ''%s'',''%s'', ''%s'', ''%s'', ''%s'') AS id',
+				v_nombre,          
+				v_cliente,        
+				v_area,
+				v_no_seguro,          
+				v_cargo,        
+				v_estrucsal,
+				v_salario,          
+				v_fecha,        
+				v_tipocontra,
+				vi_empleado
+			)
+		) AS sub(id integer);		
+
+    RETURN r_error;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.process_cancel_loan(p_new record)
+ RETURNS record
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r_custom record;
+	r_error record;
+    vi_empleado integer;
+    v_noprestamo INTEGER;
+    v_errcontextr VARCHAR;
+BEGIN
+    -- Llama a la función pivot para obtener los campos personalizados como columnas dinámicas
+    SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
+	
+	vi_empleado := r_custom.cf_49;
+    v_noprestamo := COALESCE(r_custom.cf_105)::INTEGER, 0);
+
+	SELECT * INTO r_error FROM dblink('localhost-redmine',
+			format('select * from cancel_loan(''%s'', ''%s'') AS id',
+				vi_empleado,          
+				v_noprestamo
+			)
+		) AS sub(id integer);		
+
+    RETURN r_error;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.process_add_payroll(p_new record)
+ RETURNS record
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r_custom record;
+	r_error record;
+	v_fecini DATE;
+    v_fecfin DATE;
+    v_subject VARCHAR;
+    v_description VARCHAR;
+    v_error INTEGER := 0;
+BEGIN
+    -- Llama a la función pivot para obtener los campos personalizados como columnas dinámicas
+    SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
+	
+	v_fecini := p_new.start_date;
+    v_fecfin := p_new.due_date;
+    v_subject := p_new.subject;
+    v_description := p_new.description;
+
+	SELECT * INTO r_error FROM dblink('localhost-redmine',
+			format('select * from addcancelarprestamo(''%s'', ''%s'',''%s'', ''%s'') AS id',
+				v_subject,          
+				v_description,
+				v_fecini,
+				v_fecfin
+			)
+		) AS sub(id integer);		  
+
+    RETURN r_error;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.process_add_loan(p_new record)
+ RETURNS record
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r_custom record;
+	r_error record;
+    vi_empleado integer;
+    v_montosol NUMERIC;
+    v_montoapli NUMERIC;
+    v_plazoaprob INTEGER;
+    v_interes NUMERIC;
+    v_tipopago INTEGER;
+    v_noprestamo INTEGER;
+    v_cuota NUMERIC;
+    v_codid INTEGER := 0;
+    v_errcontextr VARCHAR;
+    v_error_code INTEGER := 0;
+BEGIN
+    -- Llama a la función pivot para obtener los campos personalizados como columnas dinámicas
+    SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
+	
+	vi_empleado := r_custom.cf_49;
+    v_montosol := r_custom.cf_59)::NUMERIC;
+    v_montoapli := r_custom.cf_5)::NUMERIC;
+    v_plazoaprob := r_custom.cf_61)::INTEGER;
+    v_interes := r_custom.cf_63)::NUMERIC;
+    v_tipopago := CASE r_custom.cf_64) WHEN 'Mensual' THEN 1 ELSE 2 END;
+    v_noprestamo := COALESCE(r_custom.cf_105)::INTEGER, 0);
+    v_cuota := COALESCE(r_custom.cf_66)::NUMERIC, 0);
+
+    IF v_noprestamo = 0 AND v_cuota = 0 THEN
+        SELECT * INTO r_error FROM dblink('localhost-redmine',
+			format('select * add_loan_request(''%s'',''%s'',''%s'',''%s'',''%s'',''%s'',''%s'') AS id',
+				vi_empleado,          
+				p_new.description,
+				v_montosol,
+				v_montoapli,			
+				v_plazoaprob,
+				v_interes,
+				v_tipopago
+			)
+		) AS sub(codid INTEGER, errcontext VARCHAR, codeerror INTEGER);
+				
+        IF r_error.codid >= 0 THEN
+            UPDATE custom_values
+            SET value = CASE custom_field_id
+                            WHEN 66 THEN v_errcontextr
+                            WHEN 67 THEN v_codid::TEXT
+                            WHEN 105 THEN v_error_code::TEXT -- Usando codeerror como noprestamo si la función lo devuelve así
+                        END
+            WHERE customized_id = p_new.id
+              AND custom_field_id IN (66, 67, 105);
+        END IF;
+    ELSE
+         r_error :=(select false iserror,-1 codeerror,'El prestamo ya existe' mjserror,0 codid);		
+    END IF;
+	
+	RETURN r_error;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.process_absence_request(p_new record)
+ RETURNS record
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r_custom record;
+	r_error record;
+	v_dias NUMERIC(10,2);
+    v_tipoid INTEGER;
+    v_empleado integer;
+    v_fechaini DATE;
+    v_fechafin DATE;
+    v_descripcion VARCHAR;
+    v_tipoaucencia VARCHAR;
+    v_error INTEGER := 0;
+BEGIN
+    -- Llama a la función pivot para obtener los campos personalizados como columnas dinámicas
+    SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
+	
+	v_dias := r_custom.cf_53)::NUMERIC(10,2);
+    v_tipoid := CASE r_custom.cf_54) WHEN 'Descansadas' THEN 1 ELSE 2 END;
+    v_empleado := r_custom.cf_49);
+    v_fechaini := p_new.start_date;
+    v_fechafin := p_new.due_date;
+    v_descripcion := p_new.description;
+    v_tipoaucencia := r_custom.cf_55);
+
+	SELECT * INTO r_error FROM dblink('localhost-redmine',
+			format('SELECT addausencias(''%s'',''%s'',''%s'',''%s'',''%s'',''%s'',''%s'',''%s'',''%s'') AS id',
+				4,
+				v_tipoid,          
+				p_new.id,
+				v_empleado,
+				v_fechaini,				
+				v_fechafin,          
+				v_descripcion,
+				v_dias,
+				v_tipoaucencia
+			)
+		) AS sub(id integer);	
+
+    RETURN r_error;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.process_employee_hire(p_new record)
+ RETURNS record
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r_custom record;
+	r_error record;
+    vi_empleado integer;
+	v_nombre VARCHAR;
+    v_identificacion VARCHAR;
+    v_sexo VARCHAR;
+    v_estado_civil VARCHAR;
+    v_fecha_nac DATE;
+    v_telefono VARCHAR;
+    v_conta_emerg VARCHAR;
+    v_tel_emerg VARCHAR;
+    v_lugarnac VARCHAR;
+    v_cliente VARCHAR;
+    v_area VARCHAR;
+    v_no_seguro VARCHAR;
+    v_cargo VARCHAR;
+    v_estrucsal VARCHAR;
+    v_salario NUMERIC;
+    v_fecha DATE;
+    v_tipocontra VARCHAR;
+    v_empleado_id INTEGER := 0;
+BEGIN
+    -- Llama a la función pivot para obtener los campos personalizados como columnas dinámicas
+    SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
+	
+	v_nombre := r_custom.cf_50;
+    v_identificacion := r_custom.cf_36;
+    v_sexo := r_custom.cf_41;
+    v_estado_civil := r_custom.cf_56;
+    v_fecha_nac := r_custom.cf_40::DATE;
+    v_telefono := r_custom.cf_38;
+    v_conta_emerg := r_custom.cf_44;
+    v_tel_emerg := r_custom.cf_45;
+    v_lugarnac := r_custom.cf_43;
+    v_cliente := r_custom.cf_1;
+    v_area := r_custom.cf_28;
+    v_no_seguro := r_custom.cf_42;
+    v_cargo := r_custom.cf_39;
+    v_estrucsal := r_custom.cf_51;
+    v_salario := r_custom.cf_52::NUMERIC;
+    v_fecha := p_new.start_date;
+    v_tipocontra := r_custom.cf_58;
+    vi_empleado := r_custom.cf_49;
+	
+    -- Llamar a dblink con los datos extraídos
+    SELECT * INTO vi_empleado FROM dblink('localhost-redmine',
+        format('SELECT agregar_empleado(''%s'',''%s'',''%s'',''%s'',''%s'',''%s'', 
+										''%s'',''%s'',''%s'',''%s'',''%s'',''%s'',
+										''%s'',''%s'',''%s'',''%s'',''%s'',''%s'') AS id',
+            v_nombre,          -- nombre
+			v_area,
+			v_cargo,
+			v_telefono,
+			'mi direccion',
+			v_lugarnac,			          
+            v_sexo,          -- sexo
+			v_no_seguro,
+			v_identificacion,
+			v_conta_emerg,
+			v_tel_emerg,
+			vi_empleado,
+			v_fecha_nac,
+			v_telefono,
+			v_salario,
+			v_estrucsal, -- debe ser entera
+			v_tipocontra,
+			v_estado_civil           
+        )
+    ) AS sub(id integer);
+	   
+
+    RETURN r_error;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.process_employee_termination(p_new record)
+ RETURNS record
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r_custom record;
+	r_error record;
+    vi_empleado integer;
+    v_error INTEGER := 0;
+BEGIN
+    -- Llama a la función pivot para obtener los campos personalizados como columnas dinámicas
+    SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
+	
+	vi_empleado := r_custom.cf_49;
+
+    SELECT * INTO r_error
+    FROM dblink('localhost-redmine',
+                'SELECT public.addbajaempleado('''||v_empleado||''') AS id') AS sub(id INTEGER);
+
+   RETURN r_error;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.process_loan_consultation(p_new record)
+ RETURNS record
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r_custom record;
+	r_error record;
+    vi_empleado integer;
+    v_error INTEGER := 0;
+    v_errcontext VARCHAR;
+BEGIN
+    -- Llama a la función pivot para obtener los campos personalizados como columnas dinámicas
+    SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
+	
+	vi_empleado := r_custom.cf_49;
+
+    SELECT * INTO r_error
+    FROM dblink('localhost-redmine',
+                'SELECT codeerror, errcontext FROM public.consultaprestamo('''||v_empleado||''') AS id') AS sub(id INTEGER, errcontext VARCHAR);
+	RETURN r_error;
+	
+    /*IF v_error <> 0 THEN
+        RETURN 'ERROR';
+    ELSE
+        RETURN v_errcontext;
+    END IF;*/
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.process_payroll_marking(p_new record)
+ RETURNS record
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r_custom record;
+	r_error record;
+	v_descripcion VARCHAR;
+    v_fecha DATE;
+    v_horaini VARCHAR;
+    v_horafin VARCHAR;
+    v_doblet BOOLEAN;
+    v_horaini2 VARCHAR;
+    v_horafin2 VARCHAR;
+    v_bnc NUMERIC(10,2) := 0;
+    v_halmuerzo NUMERIC(10,2) := 0;
+    v_cena NUMERIC(10,2) := 0;
+    v_cliente VARCHAR;
+    v_pagar_extras BOOLEAN := FALSE;
+    v_error INTEGER := 0;
+BEGIN
+    -- Llama a la función pivot para obtener los campos personalizados como columnas dinámicas
+    SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
+	
+	v_descripcion := p_new.description;
+    v_fecha := p_new.start_date;
+    v_horaini := r_custom.cf_14;
+    v_horafin := r_custom.cf_15;
+    v_doblet := r_custom.cf_32::BOOLEAN;
+    v_horaini2 := r_custom.cf_33;
+    v_horafin2 := r_custom.cf_34;
+    v_bnc := COALESCE(r_custom.cf_12::NUMERIC(10,2), 0) +
+             COALESCE(r_custom.cf_30::NUMERIC(10,2), 0) +
+             COALESCE(r_custom.cf_35::NUMERIC(10,2), 0);
+			 
+    v_halmuerzo := r_custom.cf_31::NUMERIC(10,2);
+    v_cena := r_custom.cf_57::NUMERIC(10,2);
+    v_cliente := r_custom.cf_1;
+    v_pagar_extras := r_custom.cf_119::BOOLEAN;
+
+    SELECT * INTO r_error
+    FROM dblink('localhost-redmine',
+                'SELECT public.addentradassalidas('''||v_descripcion||''','''||v_fecha||''',
+                                             '''||v_horaini||''','''||v_horafin||''','||v_doblet||','''||v_horaini2||''','''||v_horafin2||
+                                             ''','||v_bnc||','||v_halmuerzo||','||v_cena||','''||v_cliente||''','||v_pagar_extras||') AS id') AS sub(id INTEGER);
+
+   RETURN r_error;
+END;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public.process_production_closing(p_new record)
+ RETURNS record
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r_custom record;
+	r_error record;
+    vi_empleado integer;
+	v_anyo INTEGER;
+    v_mes VARCHAR;
+    v_author_id INTEGER;
+    v_start_date DATE;
+    v_codid INTEGER := 0;
+    v_errcontextr VARCHAR;
+BEGIN
+    -- Llama a la función pivot para obtener los campos personalizados como columnas dinámicas
+    SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
+	
+	v_anyo := COALESCE(r_custom.cf_117::INTEGER, 0);
+    v_mes := r_custom.cf_118;
+    v_author_id := p_new.author_id;
+    v_start_date := p_new.start_date;
+
+    SELECT * INTO r_error
+    FROM public.addcierreproduccion(v_anyo, v_mes, v_author_id, v_start_date, p_new.id);
+
+    RETURN r_error;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.process_settlement_consultation(p_new record)
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r_custom record;
+    vi_empleado integer;
+    v_diasvac VARCHAR;
+    v_diasagui VARCHAR;
+    v_diasinde VARCHAR;
+    v_otroingre VARCHAR;
+    v_otrodeduc VARCHAR;
+    v_fechacorte VARCHAR;
+    v_ultinodial VARCHAR;
+    v_otingresal BOOLEAN;
+    v_datosmanuales BOOLEAN;
+    v_pagarindec BOOLEAN;
+    v_pagarsalnom BOOLEAN;
+    rec_liq RECORD;
+BEGIN
+    -- Llama a la función pivot para obtener los campos personalizados como columnas dinámicas
+    SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
+	
+	vi_empleado := r_custom.cf_49;
+    v_diasvac := r_custom.cf_71;
+    v_diasagui := r_custom.cf_72;
+    v_diasinde := r_custom.cf_73;
+    v_otroingre := r_custom.cf_77;
+    v_otrodeduc := r_custom.cf_76;
+    v_fechacorte := r_custom.cf_87;
+    v_ultinodial := r_custom.cf_89;
+    v_otingresal := r_custom.cf_78::BOOLEAN;
+    v_datosmanuales := r_custom.cf_80::BOOLEAN;
+    v_pagarindec := r_custom.cf_90::BOOLEAN;
+    v_pagarsalnom := r_custom.cf_92::BOOLEAN;
+
+    SELECT * INTO rec_liq
+    FROM dblink('localhost-redmine',
+                'SELECT * FROM public.addliquidacion('''||v_empleado||''', 0, '''||v_diasvac||''','''||v_diasagui||''','''||v_diasinde||''', 0, 0, 0,'||COALESCE(v_otroingre, '0')||','||COALESCE(v_otrodeduc, '0')||',
+                             0, 0, '||v_otingresal||', '||v_datosmanuales||', '||v_pagarindec||', '||v_pagarsalnom||','''||v_fechacorte||''','''||
+                             v_ultinodial||''') AS dat') AS sub(diaslab VARCHAR,
+                                                                diasvac VARCHAR, diasagui VARCHAR, diasinde VARCHAR, salariobc VARCHAR, prestamos VARCHAR, salneto VARCHAR,
+                                                                diasnomina VARCHAR, horaextnom VARCHAR, bonosnomina VARCHAR, insstrab VARCHAR, ingtotal VARCHAR, totdeduc VARCHAR, totrecib VARCHAR);
+
+    UPDATE custom_values
+    SET value = CASE custom_field_id
+                    WHEN 30 THEN rec_liq.bonosnomina
+                    WHEN 70 THEN rec_liq.diaslab
+                    WHEN 71 THEN rec_liq.diasvac
+                    WHEN 72 THEN rec_liq.diasagui
+                    WHEN 73 THEN rec_liq.diasinde
+                    WHEN 74 THEN rec_liq.salariobc
+                    WHEN 75 THEN rec_liq.prestamos
+                    WHEN 79 THEN rec_liq.salneto
+                    WHEN 88 THEN rec_liq.diasnomina
+                    WHEN 93 THEN rec_liq.horaextnom
+                    WHEN 83 THEN rec_liq.insstrab
+                    WHEN 84 THEN rec_liq.ingtotal
+                    WHEN 85 THEN rec_liq.totdeduc
+                    WHEN 86 THEN rec_liq.totrecib
+                END
+    WHERE customized_id = p_new.id
+      AND custom_field_id IN (30, 70, 71, 72, 73, 74, 75, 79, 88, 83, 93, 84, 85, 86);
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.process_vacation_consultation(p_new record)
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r_custom record;
+	r_error record;
+    vi_empleado integer;
+    v_acumulado NUMERIC;
+    v_solicitado NUMERIC;
+    v_netodias NUMERIC;
+    v_totalsaldo NUMERIC;
+BEGIN
+    -- Llama a la función pivot para obtener los campos personalizados como columnas dinámicas
+    SELECT * INTO r_custom FROM get_custom_values_pivot(p_new.id);
+	
+	vi_empleado := r_custom.cf_49;
+
+    SELECT acumulado, solicitado, netodias, totalsaldo INTO v_acumulado, v_solicitado, v_netodias, v_totalsaldo
+    FROM dblink('localhost-redmine',
+                'SELECT acumulado, solicitado, netodias, totalsaldo
+                 FROM public.getvacacumemp('''||v_empleado||''') AS id')
+    AS sub(acumulado NUMERIC, solicitado NUMERIC, netodias NUMERIC, totalsaldo NUMERIC);
+
+    UPDATE custom_values
+    SET value = CASE custom_field_id
+                    WHEN 53 THEN v_solicitado::TEXT
+                    WHEN 106 THEN v_acumulado::TEXT
+                    WHEN 107 THEN v_netodias::TEXT
+                    WHEN 108 THEN v_totalsaldo::TEXT
+                END
+    WHERE customized_id = p_new.id
+      AND custom_field_id IN (53, 106, 107, 108);
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.send_request_admin()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    v_error_code INTEGER := 0; -- Variable para almacenar códigos de error de las funciones de procesamiento.
+    v_consultation_result TEXT; -- Variable para almacenar el resultado de las funciones de consulta.
+    v_error_message TEXT; -- Variable para almacenar el mensaje de error.
+BEGIN
+    SELECT dblink_connect('localhost-redmine', 'host=database-1.cp7d9avi2bhm.us-east-2.rds.amazonaws.com dbname=redmine user=postgres password=root765*');
+	-- Verificar si la operación es INSERT o UPDATE en la tabla asociada al trigger.
+    IF TG_OP IN ('INSERT', 'UPDATE') THEN
+        BEGIN -- Bloque BEGIN para el manejo de excepciones
+
+            -- Procesar solicitud de ausencia (tracker_id = 8) si el estado cambia a Aprobado (status_id = 3).
+            IF NEW.tracker_id = 8 AND NEW.status_id = 3 THEN
+                -- Llamar a la función para procesar la solicitud de ausencia.
+                v_error_code := public.process_absence_request(NEW);
+                -- Si la función de procesamiento devuelve un código de error diferente de 0,
+                -- cambiar el estado de la solicitud a Pendiente (status_id = 2).
+                IF v_error_code <> 0 THEN
+                    NEW.status_id = 2;
+                END IF;
+            -- Procesar alta de empleado (tracker_id = 7) si el estado cambia a Aprobado (status_id = 3).
+            ELSIF NEW.tracker_id = 7 AND NEW.status_id = 3 THEN
+                -- Llamar a la función para procesar la alta de empleado.
+                v_error_code := public.process_employee_hire(NEW);
+                -- Si la función devuelve un ID de empleado menor o igual a 0,
+                -- cambiar el estado de la solicitud a Pendiente (status_id = 2).
+                -- De lo contrario, actualizar el campo personalizado con el ID del empleado.
+                IF v_error_code <= 0 THEN
+                    NEW.status_id = 2;
+                ELSE
+                    UPDATE custom_values SET value = v_error_code::TEXT
+                    WHERE customized_id = NEW.id
+                      AND custom_field_id = 49; -- Asumiendo que 49 es el ID del campo para el ID del empleado en la otra base.
+                END IF;
+            -- Procesar alta de contrato (tracker_id = 19) si el estado cambia a Aprobado (status_id = 3).
+            ELSIF NEW.tracker_id = 19 AND NEW.status_id = 3 THEN
+                -- Llamar a la función para procesar la alta de contrato.
+                v_error_code := public.process_contract_hire(NEW);
+                -- Si la función devuelve un código de error negativo,
+                -- cambiar el estado de la solicitud a Pendiente (status_id = 2).
+                IF v_error_code < 0 THEN
+                    NEW.status_id = 2;
+                END IF;
+            -- Procesar baja de empleado (tracker_id = 12) si el estado cambia a Aprobado (status_id = 3).
+            ELSIF NEW.tracker_id = 12 AND NEW.status_id = 3 THEN
+                -- Llamar a la función para procesar la baja de empleado.
+                v_error_code := public.process_employee_termination(NEW);
+                -- Si la función devuelve un código de error negativo,
+                -- cambiar el estado de la solicitud a Pendiente (status_id = 2).
+                IF v_error_code < 0 THEN
+                    NEW.status_id = 2;
+                END IF;
+            -- Procesar marcadas de nómina (tracker_id = 6) si el estado cambia a Aprobado (status_id = 3).
+            ELSIF NEW.tracker_id = 6 AND NEW.status_id = 3 THEN
+                -- Llamar a la función para procesar las marcadas de nómina.
+                v_error_code := public.process_payroll_marking(NEW);
+                -- Si la función devuelve un código de error negativo,
+                -- cambiar el estado de la solicitud a Pendiente (status_id = 2).
+                IF v_error_code < 0 THEN
+                    NEW.status_id = 2;
+                END IF;
+            -- Procesar bonos diarios (tracker_id = 11) si el estado cambia a Aprobado (status_id = 3).
+            ELSIF NEW.tracker_id = 11 AND NEW.status_id = 3 THEN
+                -- Llamar a la función para procesar el bono diario.
+                v_error_code := public.process_daily_bonus(NEW);
+                -- Si la función devuelve un código de error negativo,
+                -- cambiar el estado de la solicitud a Pendiente (status_id = 2).
+                IF v_error_code < 0 THEN
+                    NEW.status_id = 2;
+                END IF;
+            -- Procesar consulta de préstamos (tracker_id = 15) si el estado es Pendiente (status_id = 2).
+            ELSIF NEW.tracker_id = 15 AND NEW.status_id = 2 THEN
+                -- Llamar a la función para consultar el préstamo.
+                v_consultation_result := public.process_loan_consultation(NEW);
+                -- Si la función devuelve 'ERROR', cambiar el estado de la solicitud a Nuevo (status_id = 1).
+                -- De lo contrario, actualizar la descripción del issue con el resultado de la consulta.
+                IF v_consultation_result = 'ERROR' THEN
+                    NEW.status_id = 1;
+                ELSE
+                    NEW.description = v_consultation_result;
+                END IF;
+            -- Procesar consulta de liquidación (tracker_id = 13) si el estado es Pendiente (status_id = 2).
+            ELSIF NEW.tracker_id = 13 AND NEW.status_id = 2 THEN
+                -- Llamar a la función para consultar la liquidación.
+                PERFORM public.process_settlement_consultation(NEW);
+                -- La función de consulta de liquidación actualiza directamente la tabla custom_values.
+            -- Procesar agregar nómina (tracker_id = 16) si el estado cambia a Aprobado (status_id = 3).
+            ELSIF NEW.tracker_id = 16 AND NEW.status_id = 3 THEN
+                -- Llamar a la función para agregar la nómina.
+                v_error_code := public.process_add_payroll(NEW);
+                -- Si la función devuelve un código de error negativo,
+                -- cambiar el estado de la solicitud a Pendiente (status_id = 2).
+                IF v_error_code < 0 THEN
+                    NEW.status_id = 2;
+                END IF;
+            -- Procesar agregar préstamo (tracker_id = 9) si el estado cambia a Aprobado (status_id = 3).
+            ELSIF NEW.tracker_id = 9 AND NEW.status_id = 3 THEN
+                -- Llamar a la función para agregar el préstamo.
+                v_error_code := public.process_add_loan(NEW);
+                -- Si la función devuelve un código de error negativo,
+                -- cambiar el estado de la solicitud a Pendiente (status_id = 2).
+                -- La función de agregar préstamo también actualiza la tabla custom_values.
+                IF v_error_code < 0 THEN
+                    NEW.status_id = 2;
+                END IF;
+            -- Procesar consulta de vacaciones (tracker_id = 18) si el estado es Pendiente (status_id = 2).784-0828 sa1007
+            ELSIF NEW.tracker_id = 18 AND NEW.status_id = 2 THEN
+                -- Llamar a la función para consultar las vacaciones.
+                PERFORM public.process_vacation_consultation(NEW);
+                -- La función de consulta de vacaciones actualiza directamente la tabla custom_values.
+            -- Procesar cancelación de préstamo (tracker_id = 22) si el estado cambia a Aprobado (status_id = 3).
+            ELSIF NEW.tracker_id = 22 AND NEW.status_id = 3 THEN
+                -- Llamar a la función para cancelar el préstamo.
+                v_error_code := public.process_cancel_loan(NEW);
+                -- Si la función devuelve un código de error diferente de 0,
+                -- cambiar el estado de la solicitud a Pendiente (status_id = 2).
+                IF v_error_code <> 0 THEN
+                    NEW.status_id = 2;
+                END IF;
+            -- Procesar cierre de producción (tracker_id = 23) si el estado cambia a Aprobado (status_id = 3).
+            ELSIF NEW.tracker_id = 23 AND NEW.status_id = 3 THEN
+                v_error_code := public.process_production_closing(NEW);
+                IF v_error_code <> 0 THEN
+                    NEW.status_id = 2;
+                END IF;
+            END IF;
+							
+			SELECT dblink_disconnect('localhost-redmine');
+            RETURN NEW; -- Retornar NEW si todo sale bien dentro del bloque principal
+
+        EXCEPTION WHEN OTHERS THEN -- Capturar cualquier excepción
+            GET STACKED DIAGNOSTICS v_error_message = MESSAGE_TEXT;
+            RAISE WARNING 'Error en send_request_admin para la solicitud con ID %: %', NEW.id, v_error_message;
+            -- Aquí puedes implementar una lógica más específica para el manejo del error:
+            -- - Cambiar el estado de la solicitud a un estado de "Error" (si existe).
+            -- - Registrar el error en una tabla de logs.
+            -- - Enviar una notificación.
+            NEW.status_id = 5; -- Asumiendo que status_id = 5 representa un estado de "Error"
+            RETURN NEW; -- Retornar NEW con el estado de error actualizado
+        END;
+    END IF;
+    RETURN NEW; -- Retornar NEW si la operación no es INSERT o UPDATE
+END;
+$function$;
+
+66228
+1263
+
+
+
+
+
+
+ 
