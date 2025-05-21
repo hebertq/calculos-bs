@@ -1,0 +1,428 @@
+CREATE TYPE public.errortypemsj AS (
+	iserror bool,
+	codeerror int4,
+	mjserror varchar,
+	errcontext text,
+	codid int4);
+
+CREATE TABLE public.msterrorlog (
+	logid serial4 NOT NULL,
+	procedimiento varchar(200) NOT NULL,
+	errstate int4 DEFAULT 0 NOT NULL,
+	mensaje varchar(1000) NULL,
+	errcontent text DEFAULT 0 NOT NULL,
+	useradd int4 NOT NULL,
+	fechaadd timestamp DEFAULT now() NOT NULL,
+	fechaaddnum int4 DEFAULT to_char(now(), 'YYYYMMDD'::text)::integer NULL,
+	CONSTRAINT msterrorlog_pkey PRIMARY KEY (logid)
+);
+
+CREATE OR REPLACE FUNCTION public.add_daily_bonus(pvi_empleados integer, pdi_fecha character varying, pni_bnc numeric)
+RETURNS SETOF errortypemsj
+ LANGUAGE plpgsql
+AS $function$
+/*Procedimiento para ingreso de nuevos tipos*/
+declare ve_error errortypemsj%ROWTYPE;	
+        vi_empleado integer := 0;
+BEGIN
+     ve_error.iserror     := false;
+     ve_error.codeerror   := 0;
+     ve_error.mjserror    := 'Ok';
+	 ve_error.codid       := 0;
+	 ve_error.errcontext  := '';
+	 
+	 select e.id into vi_empleado 
+	 from public.hr_employee e where e.x_empleado_id = pvi_empleados;
+	 
+	 if vi_empleado > 0 THEN	 	 	 
+		 update public.hr_attendance set bono = coalesce(bono,0.00) + pni_bnc
+		 where cast((check_in - interval '6 hour') as date) = cast(pdi_fecha as date)
+			   and employee_id =  vi_empleado;
+	else 
+		ve_error.iserror     := true;
+		ve_error.codeerror   := -1;
+		ve_error.mjserror    := 'El empleado no existe.';
+    end if;
+				
+RETURN ve_error;		 
+EXCEPTION WHEN 
+OTHERS THEN		 
+	     GET STACKED DIAGNOSTICS ve_error.errcontext := PG_EXCEPTION_CONTEXT;
+		 ve_error.iserror   := true;
+         ve_error.codeerror := SQLSTATE;
+		 ve_error.codeerror := -1;
+         ve_error.mjserror  := SQLERRM;
+		 
+	insert into public.msterrorlog(procedimiento,errstate,mensaje,errcontent,useradd) 
+	values('public.add_daily_bonus',ve_error.codeerror,ve_error.mjserror,ve_error.errcontext,1);
+		 
+	RETURN ve_error;	 
+END;
+$function$;
+
+
+
+
+CREATE OR REPLACE FUNCTION public.add_contract_hire(pvi_nombre character varying, 
+													pvi_cliente character varying, 
+													pvi_departamento character varying,
+													pvi_no_seguro character varying, 
+													pvi_cargo character varying, 
+													pvi_estructura character varying,
+													pni_salario numeric, 
+													pti_fechaini timestamp, 
+													pvi_tipocontrato character varying, 
+													pvi_empleado integer)
+ RETURNS SETOF errortypemsj
+ LANGUAGE plpgsql
+AS $function$
+/*Procedimiento para ingreso de nuevos tipos*/
+declare ve_error errortypemsj%ROWTYPE;		
+        vi_empleado integer = 0;
+		vi_pin integer = 0;
+		vi_contrato integer = 0;
+		vi_nocontrato integer = 0;
+		vi_contratotipo integer = 0;
+		vi_estructura integer = 0;
+		vv_gender varchar;
+		vv_marital varchar;
+		vv_job_title varchar;
+		vi_job integer;
+		vi_department integer;
+		vi_parent integer;
+		vi_resource integer;
+		vts_create_date timestamp = current_timestamp;
+BEGIN	
+	 ve_error.iserror    := false;
+     ve_error.codeerror  := 0;
+     ve_error.mjserror   := 'Ok';
+	 ve_error.errcontext := '';
+	 			
+	 select id into vi_job from public.hr_job where name = pvi_cargo;			
+	 vv_job_title := 'Operario '|| 	pvi_cliente;
+	 
+	 RAISE NOTICE 'Inicio Tipo Contrato: %',pvi_tipocontrato;
+	 select id into vi_contratotipo from public.hr_contract_type where name = pvi_tipocontrato;
+	 
+	 RAISE NOTICE 'Inicio departamento: %',pvi_departamento;
+	 select id,parent_id into vi_department,vi_parent from public.hr_department where name = pvi_departamento;				
+	 
+	 RAISE NOTICE 'Inicio estructura: %',pvi_estructura;
+	 select id into vi_estructura from public.hr_payroll_structure where name = pvi_estructura;	
+	 
+	 RAISE NOTICE 'Inicio resurce: %',1;
+	 insert into public.resource_resource(name,active,company_id,resource_type,time_efficiency,calendar_id,tz,create_uid,create_date,write_uid,write_date)
+	 values(pvi_nombre,true,1,'user',100,1,'America/Managua',1,vts_create_date,1,vts_create_date);
+	
+	 vi_resource := (select currval(pg_get_serial_sequence('public.resource_resource', 'id')));	
+	 RAISE NOTICE 'Fin resurce: %',vi_resource;
+	 
+	 select id into vi_empleado 
+	 from public.hr_employee 
+	 where x_empleado_id = pvi_empleado;
+	 RAISE NOTICE 'empelado: %',vi_empleado;
+	 
+	 select count(*) + 1 into vi_nocontrato from 
+	 public.hr_contract
+	 where employee_id = vi_empleado;
+	
+	 insert into public.hr_contract(name,active,structure_type_id,employee_id,department_id,job_id,date_start,
+								   resource_calendar_id,wage,state,company_id,create_uid,schedule_pay,
+								   create_date,write_uid,write_date,struct_id,type_id,kanban_state,journal_id)
+	 values(replace(pvi_nombre,' ','')|| right(('000'||vi_nocontrato::varchar),3),true,1,vi_empleado,vi_department,vi_job,pti_fechaini,
+		   1,pni_salario,'open',1,1,'bi-monthly',vts_create_date,1,vts_create_date,vi_estructura,vi_contratotipo,'normal',11)returning id into vi_contrato;
+		   
+	 RAISE NOTICE 'Contrato: %',vi_contrato;		
+	 update public.hr_employee set contract_id = vi_contrato,passport_id = pvi_no_seguro where id = vi_empleado;
+	 
+	 delete from aguinaldo_acumulados where empleado = vi_empleado;
+	 delete from vacaciones_acumulados where empleado = vi_empleado;
+	 delete from diastrabajados_acumulados where empleado = vi_empleado;
+	 
+	 insert into aguinaldo_acumulados(empleado,acumulado,solicitado,totaldias,totalsaldo)
+	 values(vi_empleado,0.00,0.00,0.00,0.00);
+
+	 insert into vacaciones_acumulados(empleado,acumulado,solicitado,totaldias,totalsaldo)
+	 values(vi_empleado,0.00,0.00,0.00,0.00);
+	
+	 insert into public.diastrabajados_acumulados(empleado,acumulado,vacaciones,subcidios,totaldias)
+	 values(vi_empleado,0.00,0.00,0.00,0.00);
+	
+RETURN  ve_error;		 
+
+EXCEPTION WHEN 
+OTHERS THEN		
+         RAISE NOTICE 'Error: %',SQLERRM;
+		 RAISE NOTICE 'Error contrato: %',vi_contrato;
+		 
+	     GET STACKED DIAGNOSTICS ve_error.errcontext := PG_EXCEPTION_CONTEXT;
+		 ve_error.iserror   := true;
+         ve_error.codeerror := SQLSTATE;
+         ve_error.mjserror  := SQLERRM;
+		 ve_error.codid     := -1;
+		 
+		insert into public.msterrorlog(procedimiento,errstate,mensaje,errcontent,useradd) 
+		values('public.add_contract_hire',ve_error.codeerror,ve_error.mjserror,ve_error.errcontext,1);
+		
+		SELECT setval(pg_get_serial_sequence('public.hr_contract', 'id'), coalesce(max(id),0) + 1, false) 
+		FROM public.hr_contract;
+		
+		RETURN ve_error;
+END;
+$function$;
+
+-- DROP FUNCTION public.calcular_cuota_prestamo(numeric, numeric, int4, int4);
+
+CREATE OR REPLACE FUNCTION public.calcular_cuota_prestamo(p_monto numeric, p_tasa_mensual numeric, p_plazo_meses integer, p_frecuencia_pago integer DEFAULT 1)
+ RETURNS numeric(10,2)
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    r numeric;             -- Tasa de interés periódica (mensual en este caso)
+    n integer;             -- Número total de períodos (meses)
+    cuota_fija numeric;    -- Cuota fija calculada
+    v_tasa_periodica numeric;
+BEGIN
+    -- La tasa de interés periódica ya es mensual
+    r := p_tasa_mensual / p_frecuencia_pago;
+
+    -- El número total de períodos es el plazo en meses
+    n := p_plazo_meses * p_frecuencia_pago;
+
+    -- Calcular la cuota fija usando la fórmula
+    IF r = 0 THEN
+        -- Si la tasa de interés es 0, la cuota es simplemente el principal dividido por el número de períodos
+        cuota_fija := (p_monto / n);
+    ELSE
+        cuota_fija := (p_monto * (r * (pow((1 + r), n)))) / (pow((1 + r), n) - 1);
+    END IF;
+
+    RETURN round(cuota_fija,3); -- Redondear la cuota a 2 decimales para fines prácticos
+END;
+$function$;
+
+--drop FUNCTION public.crear_tabla_amortizacion
+CREATE OR REPLACE FUNCTION public.crear_tabla_amortizacion(p_monto numeric, 
+														   p_tasa_mensual numeric, 
+														   p_plazo_meses integer, 
+														   p_frecuencia_pago_mes integer DEFAULT 1,
+														   p_fecha_inicio date DEFAULT current_date -- Fecha de inicio del préstamo
+														   )
+ RETURNS TABLE(pago_num integer, cuota numeric(10,3), intereses numeric(10,3), principal numeric(10,3), saldo numeric(10,3),fecha_pago date)
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    v_tasa_periodica numeric;
+    v_num_pagos integer;
+    v_cuota_fija_periodica numeric; -- Cuota fija por período (mensual or quincenal)
+    v_saldo numeric := p_monto;
+    v_interes numeric;
+    v_principal numeric;
+    v_pago_num integer := 0;
+    v_fecha_actual date;
+BEGIN
+    -- Calcular la tasa de interés periódica
+    v_tasa_periodica := p_tasa_mensual / p_frecuencia_pago_mes;
+
+    -- Calcular el número total de pagos
+    v_num_pagos := p_plazo_meses * p_frecuencia_pago_mes;
+
+    -- Calcular la cuota fija por período
+    v_cuota_fija_periodica :=  public.calcular_cuota_prestamo(p_monto,p_tasa_mensual,p_plazo_meses,p_frecuencia_pago_mes);
+
+    -- Insertar la fila inicial (pago 0)
+    pago_num   := v_pago_num;
+    cuota      := 0.00;
+    intereses  := 0.00;
+    principal  := 0.00;
+    saldo      := round(v_saldo, 2); -- Redondeamos el saldo inicial para la visualización
+    fecha_pago := p_fecha_inicio; -- La fecha del pago 0 es la fecha de inicio
+    RETURN NEXT;
+
+    -- Generar la tabla de amortización para los pagos reales (desde el pago 1)
+    WHILE v_pago_num < v_num_pagos
+    LOOP
+        v_pago_num := v_pago_num + 1; -- Incrementar el número de pago al inicio
+
+        -- Calcular la fecha de pago para el vencimiento actual
+        IF p_frecuencia_pago_mes = 1 THEN -- Pagos mensuales
+            -- Para el pago 1, se suma 1 mes; para el pago 2, 2 meses, etc.
+            v_fecha_actual := p_fecha_inicio + INTERVAL '1 month' * v_pago_num;
+        ELSIF p_frecuencia_pago_mes = 2 THEN -- Pagos quincenales (dos veces al mes)
+            -- Para el pago 1, se suman 15 días; para el pago 2, 30 días (2*15), etc.
+            v_fecha_actual := p_fecha_inicio + (INTERVAL '15 days' * v_pago_num);
+        ELSE
+            -- Manejo de otras frecuencias o un valor por defecto si no se reconoce
+            v_fecha_actual := NULL;
+        END IF;
+
+        -- Calcular el interés basado en el saldo actual
+        v_interes := v_saldo * v_tasa_periodica;
+        v_principal := v_cuota_fija_periodica - v_interes;
+
+        -- Ajuste para la última cuota para asegurar que el saldo sea cero exacto
+        IF v_pago_num = v_num_pagos THEN
+            v_principal := v_saldo;
+            cuota := v_interes + v_principal; -- La cuota final puede ser ligeramente diferente
+        else
+         	cuota := v_cuota_fija_periodica;
+        END IF;
+
+        v_saldo := v_saldo - v_principal;
+
+        -- Asignar y redondear los valores para la salida de la tabla
+        pago_num   := v_pago_num;      -- Correcto: sin redondeo para INTEGER
+        cuota      := round(cuota::numeric, 2);
+        intereses  := round(v_interes::numeric, 2);
+        principal  := round(v_principal::numeric, 2);
+        saldo      := round(v_saldo::numeric, 2);
+        fecha_pago := v_fecha_actual;
+        RETURN NEXT;
+    END LOOP;
+
+    RETURN;
+END;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public.add_loan_request(pii_empleado integer, 
+												   piv_motivoprestamo character varying, 
+												   pin_montosolicitado numeric, 
+												   pin_montoaprobado numeric, 
+												   pii_plazo integer, 
+												   pin_intereses numeric, 
+												   pii_tipopago integer,
+												   pid_fechapago date)
+ RETURNS SETOF errortypemsj
+ LANGUAGE plpgsql
+AS $function$
+/*Procedimiento para ingreso de nuevos tipos*/
+declare ve_error errortypemsj%ROWTYPE;
+        vn_cuota numeric(18,2);
+	    vn_interes numeric(18,4);
+		vi_numcuota integer;
+		vi_empleado integer;
+		vi_id int;
+		vi_maxprestamo integer;
+	    vi_total_principal numeric(18,2);
+	    vi_total_interes numeric(18,2);
+BEGIN
+     ve_error.iserror    := false;
+     ve_error.codeerror  := 0;
+     ve_error.mjserror   := 'Ok';
+	 ve_error.codid      := 0;
+	 ve_error.errcontext := '';
+	 
+	 vn_interes    := pin_intereses /100;
+	 vi_numcuota   := pii_plazo;
+	 
+	 IF pii_empleado IS NULL THEN
+        ve_error.iserror := true;
+        ve_error.codid  := -100;
+        ve_error.codeerror := -1897; -- Código de error para violación de restricción NOT NULL
+        ve_error.mjserror := 'El ID del empleado no puede ser nulo.';
+        RETURN NEXT v_error;
+        RETURN; -- Salir de la función
+     END IF;
+    
+	 select id into vi_empleado 
+	 from hr_employee 
+	 where x_empleado_id = pii_empleado;
+	 
+	 -- calcular la cuota del prestamo a aplicar -----
+	 vn_cuota := public.calcular_cuota_prestamo(pin_montoaprobado,vn_interes,pii_plazo,pii_tipopago);
+	 
+	 if not exists(select from hr_loan where employee_id = vi_empleado and cast(create_date as date) = cast((current_date - interval '6 hour') as date)) then
+        select max(id)+1 into vi_maxprestamo from public.hr_loan;
+       	
+		insert into public.hr_loan(employee_id,installment,company_id,currency_id,create_uid,write_uid,		
+	                    name,state,date,payment_date,create_date,write_date,loan_amount,total_amount,	                    
+	                    balance_amount,total_paid_amount,x_interes,employee_account_id,treasury_account_id,journal_id)
+		values(vi_empleado,(pii_plazo*pii_tipopago)+1,1,119,1,1,		
+		       'LO/00' || vi_maxprestamo::varchar,'approve',pid_fechapago,pid_fechapago,current_timestamp,current_timestamp,vn_cuota,0,
+		       0.00,0.00,vn_interes::float8,2,2,2) RETURNING id into vi_id;	
+		
+	    ve_error.codeerror  := vi_id;
+		if vi_id is not null then
+		    insert into hr_loan_line(employee_id,loan_id,create_uid,write_uid,x_no_cuota,amount,x_interes,x_principal,x_saldo,date,paid,create_date,write_date)
+		    select vi_empleado,vi_id,1,1,*,false,current_date,current_timestamp
+			from public.crear_tabla_amortizacion(pin_montoaprobado,vn_interes,pii_plazo,pii_tipopago);	
+		    
+		    select sum(x_principal),sum(x_interes) into vi_total_principal,vi_total_interes
+		    from hr_loan_line
+		    where employee_id = vi_empleado
+		          and loan_id = vi_id;
+		         
+		    update hr_loan set total_paid_amount = vi_total_interes,
+		                       total_amount = vi_total_principal,
+		                       balance_amount = vi_total_principal + vi_total_interes,
+		                       name = 'LO/00' || (vi_maxprestamo::varchar)
+		    where id = vi_id;	
+		end if;
+     end if;
+	 
+	 ve_error.codid      := vi_numcuota * pii_tipopago;
+	 ve_error.errcontext := cast(vn_cuota as varchar); 
+RETURN NEXT ve_error;		 
+EXCEPTION WHEN 
+OTHERS THEN		 
+	     GET STACKED DIAGNOSTICS ve_error.errcontext := PG_EXCEPTION_CONTEXT;
+		 ve_error.iserror   := true;
+         ve_error.codeerror := SQLSTATE;
+         ve_error.mjserror  := SQLERRM;
+		 
+	insert into public.msterrorlog(procedimiento,errstate,mensaje,errcontent,useradd) 
+	values('public.addprestamo',ve_error.codeerror,ve_error.mjserror,ve_error.errcontext,1);
+
+	SELECT setval(pg_get_serial_sequence('hr_loan','id'), (SELECT MAX(id) FROM hr_loan)) into vi_id;
+	
+	RETURN NEXT ve_error;	 
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.cancel_loan(pii_empleado integer, 
+											  pii_prestamo integer, 
+											  pii_tarea integer)
+ RETURNS SETOF errortypemsj
+ LANGUAGE plpgsql
+AS $function$
+/*Procedimiento para ingreso de nuevos tipos*/
+declare ve_error errortypemsj%ROWTYPE;        
+		vi_empleado integer;
+BEGIN
+     ve_error.iserror    := false;
+     ve_error.codeerror  := 0;
+     ve_error.mjserror   := 'Ok';
+	 ve_error.codid      := 0;
+	 ve_error.errcontext := '';
+	 
+	 select id into vi_empleado 
+	 from hr_employee 
+	 where x_empleado_id = pii_empleado;
+	 
+	 update public.hr_loan_line set x_tarea_id = pii_tarea ,
+	 								write_date = current_date ,
+									paid = true 
+	 where prestamo = loan_id and x_no_cuota > 0 and paid = false;
+	  
+	 update public.bsprestamos set x_tarea_id = pii_tarea ,
+	 							   write_date = current_date ,
+								   state = 'done' 
+	 where id = pii_prestamo
+	       and employee_id = vi_empleado;
+	 
+     RETURN NEXT ve_error;		 
+EXCEPTION WHEN 
+OTHERS THEN		 
+	     GET STACKED DIAGNOSTICS ve_error.errcontext := PG_EXCEPTION_CONTEXT;
+		 ve_error.codid     := -1;
+		 ve_error.iserror   := true;
+         ve_error.codeerror := SQLSTATE;
+         ve_error.mjserror  := SQLERRM;
+		 
+	insert into public.msterrorlog(procedimiento,errstate,mensaje,errcontent,useradd) 
+	values('public.addcancelarprestamo',ve_error.codeerror,ve_error.mjserror,ve_error.errcontext,1);
+		
+	RETURN NEXT ve_error;	 
+END;
+$function$;
