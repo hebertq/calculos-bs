@@ -1,0 +1,496 @@
+CREATE EXTENSION dblink;
+drop FUNCTION conectar_dblink()
+drop FUNCTION desconectar_dblink
+
+SELECT dblink_connect(
+    'odoo-remote','host=database-1.cp7d9avi2bhm.us-east-2.rds.amazonaws.com port=5432 dbname=bsadmin user=postgres password=root765*'
+   );
+
+select dblink_disconnect('odoo-remote')
+select * from public.hr_employee where id <> 1
+select * from hr_work_entry
+
+delete from hr_work_entry where id <> 1
+delete from hr_leave
+delete from hr_leave_allocation
+delete from public.hr_employee where id <> 1
+delete from public.hr_contract where id <> 1
+
+insert into public.user_preferences(user_id,others,hide_mail,time_zone)
+
+SELECT setval(pg_get_serial_sequence('hr_contract','id'), (SELECT MAX(id)+1 FROM hr_contract))
+SELECT setval(pg_get_serial_sequence('hr_employee','id'), (SELECT MAX(id)+1 FROM hr_employee))
+
+
+DO $$
+DECLARE
+    rec RECORD;
+    resultado RECORD;
+BEGIN
+    FOR rec IN select * from dblink('odoo-remote',
+									'select pin::integer empleado_id,department_id,job_id,name,job_title,mobile_phone,gender,marital,place_of_birth,
+									identification_id,passport_id,emergency_contact,emergency_phone,birthday
+									from public.hr_employee'
+									) AS sub(empleado_id integer,department_id integer,job_id integer,name character varying ,job_title character varying,mobile_phone character varying,    
+									gender character varying,marital character varying,place_of_birth character varying,identification_id character varying,
+									passport_id character varying,emergency_contact character varying,emergency_phone character varying,birthday date)
+			   where empleado_id is not null
+			         and empleado_id > 1
+			   order by empleado_id asc 
+	 LOOP
+        resultado := public.add_employee_hire(rec.name,
+								  14,
+								  rec.job_title,
+								  rec.mobile_phone,
+								  'Actualizar despues.',
+								   rec.place_of_birth,
+								   rec.gender,
+								   rec.passport_id,
+								   rec.identification_id,
+								   rec.emergency_contact,
+								   rec.emergency_phone,
+								   rec.empleado_id,
+								   rec.birthday,
+								   current_date,
+								   8000,
+								   1,
+								   1,
+								   rec.marital
+								);      
+        RAISE NOTICE 'Resultado para empleado ID %: %', rec.empleado_id, resultado.codid;
+		--PERFORM pg_sleep(1); -- Retardo de 1 segundo
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+
+update hr_employee set x_activo_inss = s.x_registrado_inss,
+                       x_pago_tarjeta = s.x_tienetarjeta
+from    
+(select * from dblink('odoo-remote',
+'select pin::integer empleado_id,x_tienetarjeta,case when x_registrado_inss is nu ll then false else x_registrado_inss end x_registrado_inss
+from public.hr_employee') AS sub(empleado_id integer,x_tienetarjeta boolean,x_registrado_inss boolean)) as s
+where hr_employee.x_empleado_id = s.empleado_id
+
+
+select * from hr_department order by id asc
+
+DO $$
+DECLARE
+    rec RECORD;
+    resultado integer;
+BEGIN
+    FOR rec IN 
+        SELECT * 
+        FROM dblink('odoo-remote',
+            'SELECT e.pin::integer AS employee_id,
+                    a.check_in,
+                    a.check_out,
+                    COALESCE(a.bono, 0.00) AS bono,
+                    COALESCE(a.almuerzo_cena, 0.00) AS almuerzo_cena,
+                    CASE 
+                        WHEN a.area = 3 THEN 4 
+                        WHEN a.area = 12 THEN 8
+                        WHEN a.area = 25 THEN 5 
+                        WHEN a.area = 36 THEN 14
+                        WHEN a.area = 23 THEN 7 
+                        ELSE 14 
+                    END AS company_id,
+                    a.dobleturno,
+                    a.pagar_extras
+             FROM public.hr_attendance a
+             INNER JOIN public.hr_employee e ON e.id = a.employee_id
+             GROUP BY e.pin::integer, a.check_in, a.check_out, a.bono, a.almuerzo_cena, a.area, a.dobleturno, a.pagar_extras'
+        ) AS sub(
+            employee_id integer,
+            check_in timestamp,
+            check_out timestamp,
+            bono numeric,
+            almuerzo_cena numeric,
+            company_id integer,
+            dobleturno integer,
+            pagar_extras boolean
+        )
+    LOOP
+        BEGIN
+            resultado := public.registrar_marcacion_x_id(
+                rec.employee_id,
+                rec.check_in,
+                rec.check_out,
+                rec.bono,
+                rec.almuerzo_cena,
+                false,
+                rec.company_id
+            );
+            RAISE NOTICE 'Marcación registrada para empleado ID %: %', rec.employee_id, resultado;
+
+        EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'Error para empleado ID %: %', rec.employee_id, SQLERRM;
+            -- Opcional: puedes registrar en una tabla de errores si lo deseas
+        END;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT setval(pg_get_serial_sequence('public.hr_contract', 'id'), (select max(id) + 1 from hr_contract), false)
+
+
+select * from public.hr_contract
+
+ALTER TABLE hr_employee
+    DROP CONSTRAINT IF EXISTS hr_employee_contract_id_fkey;
+
+ALTER TABLE hr_payslip
+    DROP CONSTRAINT IF EXISTS hr_payslip_contract_id_fkey;
+
+ALTER TABLE hr_payslip_input
+    DROP CONSTRAINT IF EXISTS hr_payslip_input_contract_id_fkey;
+
+ALTER TABLE hr_payslip_line
+    DROP CONSTRAINT IF EXISTS hr_payslip_line_contract_id_fkey;
+
+ALTER TABLE hr_payslip_worked_days
+    DROP CONSTRAINT IF EXISTS hr_payslip_worked_days_contract_id_fkey;
+
+ALTER TABLE hr_work_entry
+    DROP CONSTRAINT IF EXISTS hr_work_entry_contract_id_fkey;
+	
+ALTER TABLE hr_contract
+    DROP CONSTRAINT IF EXISTS hr_contract_pkey;
+
+ALTER TABLE public.hr_contract
+    DROP CONSTRAINT hr_contract_struct_id_fkey
+
+delete from public.hr_contract order by id asc
+
+select * from public.hr_contract
+
+DO $$
+DECLARE
+    rec RECORD;
+    resultado RECORD;
+BEGIN
+    FOR rec IN select * from dblink('odoo-remote',
+									' select e.pin::integer empleado,a.id contrato,e.name,a.date_start,a.date_end,a.wage,
+											a.state,COALESCE(a.struct_id, 3)struct_id,a.type_id,e.passport_id,e.x_tienetarjeta,e.x_registrado_inss
+									 from hr_contract a
+									 inner join hr_employee e on e.id = a.employee_id
+									 order by a.id asc'
+									) AS sub(empleado integer,contrato integer,name varchar,date_start date,date_end date,wage numeric,state varchar,
+ 											 struct_id integer,type_id integer,passport_id varchar,x_tienetarjeta boolean,x_registrado_inss boolean)
+	 LOOP
+        resultado := public.add_contract_hire( rec.name, -- Renombrado para mayor claridad: Nombre completo del empleado
+											    14,
+											    rec.passport_id,
+											    6,
+											    rec.struct_id,
+											    rec.wage,
+											    rec.date_start, -- Renombrado pti_fechaini a pti_fecha_inicio para consistencia
+											    rec.empleado, -- Renombrado pvi_empleadoid para mayor claridad: Este es x_empleado_id
+											    rec.type_id,
+											    rec.x_registrado_inss,
+											    rec.x_tienetarjeta,
+											    true,
+											    rec.state,
+												rec.date_end,
+												rec.contrato
+											);
+        RAISE NOTICE 'Resultado para empleado ID %: %', rec.empleado, resultado.codid;
+		--PERFORM pg_sleep(1); -- Retardo de 1 segundo
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+
+select * from hr_contract
+ALTER TABLE hr_contract
+    ADD CONSTRAINT hr_contract_pkey PRIMARY KEY (id);
+	
+-- hr_employee.contract_id → hr_contract.id
+ALTER TABLE hr_employee
+    ADD CONSTRAINT hr_employee_contract_id_fkey
+    FOREIGN KEY (contract_id)
+    REFERENCES hr_contract (id)
+    ON DELETE SET NULL;
+
+-- hr_payslip.contract_id → hr_contract.id
+ALTER TABLE hr_payslip
+    ADD CONSTRAINT hr_payslip_contract_id_fkey
+    FOREIGN KEY (contract_id)
+    REFERENCES hr_contract (id)
+    ON DELETE SET NULL;
+
+-- hr_payslip_input.contract_id → hr_contract.id
+ALTER TABLE hr_payslip_input
+    ADD CONSTRAINT hr_payslip_input_contract_id_fkey
+    FOREIGN KEY (contract_id)
+    REFERENCES hr_contract (id)
+    ON DELETE CASCADE;
+
+-- hr_payslip_line.contract_id → hr_contract.id
+ALTER TABLE hr_payslip_line
+    ADD CONSTRAINT hr_payslip_line_contract_id_fkey
+    FOREIGN KEY (contract_id)
+    REFERENCES hr_contract (id)
+    ON DELETE CASCADE;
+
+-- hr_payslip_worked_days.contract_id → hr_contract.id
+ALTER TABLE hr_payslip_worked_days
+    ADD CONSTRAINT hr_payslip_worked_days_contract_id_fkey
+    FOREIGN KEY (contract_id)
+    REFERENCES hr_contract (id)
+    ON DELETE CASCADE;
+
+-- hr_work_entry.contract_id → hr_contract.id
+ALTER TABLE hr_work_entry
+    ADD CONSTRAINT hr_work_entry_contract_id_fkey
+    FOREIGN KEY (contract_id)
+    REFERENCES hr_contract (id)
+    ON DELETE CASCADE;
+
+ALTER TABLE IF EXISTS public.hr_contract
+    ADD CONSTRAINT hr_contract_struct_id_fkey FOREIGN KEY (struct_id)
+    REFERENCES public.hr_payroll_structure (id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE SET NULL;
+
+SELECT setval(pg_get_serial_sequence('public.hr_payslip_run', 'id'), (select max(id) + 1 from hr_payslip_run), false)
+
+ALTER TABLE hr_payslip DROP CONSTRAINT hr_payslip_payslip_run_id_fkey;
+
+ALTER TABLE hr_payslip_run DROP CONSTRAINT hr_payslip_run_pkey;
+
+insert into hr_payslip_run
+select * from dblink('odoo-remote','select id,1 create_uid,1 write_uid,name,state,date_start,
+		 									 date_end,credit_note,create_date,write_date,2 journal_id, 1 company_id
+									 from hr_payslip_run'
+) AS sub(id integer,create_uid integer,write_uid integer,name character varying,state character varying,date_start date,
+		 date_end date,credit_note boolean,create_date timestamp,write_date timestamp,journal_id integer,company_id integer)
+		 
+
+ALTER TABLE hr_payslip_run ADD CONSTRAINT hr_payslip_run_pkey PRIMARY KEY (id);
+
+ALTER TABLE hr_payslip 
+ADD CONSTRAINT hr_payslip_payslip_run_id_fkey 
+FOREIGN KEY (payslip_run_id) 
+REFERENCES hr_payslip_run(id);
+
+select * from public.hr_payslip_run
+
+select * from public.hr_payslip
+
+
+ALTER TABLE hr_payslip_input DROP CONSTRAINT hr_payslip_input_payslip_id_fkey;
+ALTER TABLE hr_payslip_line DROP CONSTRAINT hr_payslip_line_slip_id_fkey;
+ALTER TABLE hr_payslip_worked_days DROP CONSTRAINT hr_payslip_worked_days_payslip_id_fkey;
+ALTER TABLE hr_loan_line DROP CONSTRAINT hr_loan_line_payslip_id_fkey;
+ALTER TABLE hr_payslip DROP CONSTRAINT hr_payslip_pkey;
+
+select * from hr_contract where id = 1490
+
+insert into hr_payslip(id,struct_id,employee_id, company_id,contract_id,payslip_run_id,create_uid,write_uid,
+		               name,number,state,date_from,date_to,note,paid,credit_note,
+		               create_date,write_date,journal_id,date)
+select id,struct_id, (select id from hr_employee where x_empleado_id = employee limit 1) empleado, company_id,contract_id,payslip_run_id,create_uid,write_uid,
+		name,number,state,date_from,date_to,note,paid,credit_note,
+		create_date,write_date,journal_id,date
+from dblink('odoo-remote','select a.id,a.struct_id,e.pin::integer employee,1 company_id,a.contract_id,payslip_run_id,1 create_uid,1 write_uid,
+									 a.name,number,state,date_from,date_to,note,true paid,credit_note,
+									 a.create_date,a.write_date,2 journal_id,date
+									 from hr_payslip a
+									 inner join hr_employee e on e.id = a. employee_id'
+) AS sub(id integer,struct_id integer,employee integer,company_id integer,contract_id integer,payslip_run_id integer,create_uid integer,write_uid integer,
+name character varying,number character varying,state character varying,date_from date,date_to date,note text,paid boolean,credit_note boolean,
+create_date timestamp,write_date timestamp,journal_id integer,date  date)
+where contract_id in (select id from hr_contract)
+		 
+ALTER TABLE hr_payslip ADD CONSTRAINT hr_payslip_pkey PRIMARY KEY (id);
+
+-- hr_payslip_input.payslip_id → hr_payslip.id
+ALTER TABLE hr_payslip_input
+ADD CONSTRAINT hr_payslip_input_payslip_id_fkey
+FOREIGN KEY (payslip_id)
+REFERENCES hr_payslip(id)
+ON DELETE CASCADE;
+
+-- hr_payslip_line.slip_id → hr_payslip.id
+ALTER TABLE hr_payslip_line
+ADD CONSTRAINT hr_payslip_line_slip_id_fkey
+FOREIGN KEY (slip_id)
+REFERENCES hr_payslip(id)
+ON DELETE CASCADE;
+
+-- hr_payslip_worked_days.payslip_id → hr_payslip.id
+ALTER TABLE hr_payslip_worked_days
+ADD CONSTRAINT hr_payslip_worked_days_payslip_id_fkey
+FOREIGN KEY (payslip_id)
+REFERENCES hr_payslip(id)
+ON DELETE CASCADE;
+
+-- hr_loan_line.payslip_id → hr_payslip.id
+ALTER TABLE hr_loan_line
+ADD CONSTRAINT hr_loan_line_payslip_id_fkey
+FOREIGN KEY (payslip_id)
+REFERENCES hr_payslip(id)
+ON DELETE SET NULL;
+
+
+insert into hr_payslip_worked_days(payslip_id,sequence,contract_id,create_uid,write_uid,name,code,create_date,write_date,number_of_days ,number_of_hours)
+select *
+from dblink('odoo-remote','select payslip_id,sequence,contract_id,1 create_uid,1 write_uid,name,code,create_date,write_date,number_of_days ,number_of_hours
+						   from hr_payslip_worked_days '
+) AS sub(payslip_id integer,sequence integer,contract_id integer,create_uid integer,write_uid integer,name character varying,
+code character varying,create_date timestamp,write_date timestamp,number_of_days double precision,number_of_hours double precision)
+where payslip_id in (select id from hr_payslip)
+      and contract_id in (select id from hr_contract)
+
+ 
+insert into hr_payslip_worked_days(payslip_id,sequence,contract_id,create_uid,write_uid,name,code,create_date,write_date,number_of_days ,number_of_hours)
+select *
+from dblink('odoo-remote','select payslip_id,sequence,contract_id,1 create_uid,1 write_uid,name,code,create_date,write_date,number_of_days ,number_of_hours
+						   from hr_payslip_worked_days '
+) AS sub(payslip_id integer,sequence integer,contract_id integer,create_uid integer,write_uid integer,name character varying,
+code character varying,create_date timestamp,write_date timestamp,number_of_days double precision,number_of_hours double precision)
+where payslip_id in (select id from hr_payslip)
+      and contract_id in (select id from hr_contract)
+
+
+insert into hr_payslip_line(sequence, category_id, parent_rule_id, company_id, register_id, create_uid, write_uid, slip_id, salary_rule_id, employee_id, contract_id, code,
+            condition_select, condition_range, amount_select, amount_percentage_base, name, condition_python, amount_python_compute, note,
+            quantity, amount_fix, amount_percentage, rate, amount,total, active, appears_on_payslip, create_date, write_date,
+            condition_range_min, condition_range_max)				
+SELECT sequence, category_id, parent_rule_id,1 company_id, case when register_id = 5 then 2 else 1 end ,1 create_uid,1 write_uid, slip_id, salary_rule_id, 
+       (select employee_id from hr_contract where id = contract_id) employee_id, contract_id, code,
+            condition_select, condition_range, amount_select, amount_percentage_base, 
+			('{ "en_US": "' || replace(name, '"', '\"') || '", "es_419": "' || replace(name, '"', '\"') || '" }')::jsonb , condition_python, amount_python_compute, note,
+            quantity, amount_fix, amount_percentage, rate, amount,0 total, active, appears_on_payslip, create_date, write_date,
+            condition_range_min, condition_range_max
+FROM dblink(
+    'odoo-remote',
+    'SELECT sequence, category_id, parent_rule_id,1 company_id, register_id,1 create_uid,1 write_uid, slip_id, salary_rule_id, employee_id, contract_id, code,
+            condition_select, condition_range, amount_select, amount_percentage_base, name::text, condition_python, amount_python_compute, note,
+            quantity, amount_fix, amount_percentage, rate, amount,0 total, active, appears_on_payslip, create_date, write_date,
+            condition_range_min, condition_range_max
+     FROM hr_payslip_line'
+) AS sub(
+    sequence INTEGER,
+    category_id INTEGER,
+    parent_rule_id INTEGER,
+    company_id INTEGER,
+    register_id INTEGER,
+    create_uid INTEGER,
+    write_uid INTEGER,
+    slip_id INTEGER,
+    salary_rule_id INTEGER,
+    employee_id INTEGER,
+    contract_id INTEGER,
+    code VARCHAR,
+    condition_select VARCHAR,
+    condition_range VARCHAR,
+    amount_select VARCHAR,
+    amount_percentage_base VARCHAR,
+    name TEXT,  -- jsonb no se soporta directamente en dblink, mejor traer como text y luego casteas si necesitas
+    condition_python TEXT,
+    amount_python_compute TEXT,
+    note TEXT,
+    quantity NUMERIC,
+    amount_fix NUMERIC,
+    amount_percentage NUMERIC,
+    rate NUMERIC,
+    amount NUMERIC,
+    total NUMERIC,
+    active BOOLEAN,
+    appears_on_payslip BOOLEAN,
+    create_date TIMESTAMP,
+    write_date TIMESTAMP,
+    condition_range_min DOUBLE PRECISION,
+    condition_range_max DOUBLE PRECISION
+) where slip_id in (select id from hr_payslip)
+      and contract_id in (select id from hr_contract)
+
+INSERT INTO public.hr_payslip_input (
+    payslip_id, sequence, contract_id, create_uid, write_uid,
+    name, code,create_date, write_date, amount,date_from,date_to
+)
+SELECT
+    payslip_id, sequence, contract_id, create_uid, write_uid,
+    name, code, create_date, write_date, amount,create_date::date date_from,create_date::date date_to
+FROM dblink(
+    'odoo-remote',
+    'SELECT payslip_id, sequence, contract_id, 1 AS create_uid, 1 AS write_uid,
+            name, code, create_date, write_date, amount
+     FROM hr_payslip_input'
+) AS sub(
+    payslip_id INTEGER,
+    sequence INTEGER,
+    contract_id INTEGER,
+    create_uid INTEGER,
+    write_uid INTEGER,
+    name VARCHAR,
+    code VARCHAR,
+    create_date TIMESTAMP,
+    write_date TIMESTAMP,
+    amount DOUBLE PRECISION
+)where payslip_id in (select id from hr_payslip)
+      and contract_id in (select id from hr_contract)
+
+
+create table temporaline as 
+select * from public.hr_payslip_line where code in('0270','inss')
+
+
+update hr_payslip_line set amount = s.amount
+from temporaline s
+where hr_payslip_line.slip_id = s.slip_id
+      and hr_payslip_line.code = 'inss'
+	  and s.code = '0270'
+	  
+	  select * from public.hr_payslip
+
+DO $$
+DECLARE
+    rec RECORD;
+    resultado RECORD;
+BEGIN
+    FOR rec IN  select x_empleado_id,(case when dias > 1 then 1.25 else dias end)::numeric(10,2) acumulado ,date_from,date_to
+				from 
+				(select c.id contrato,a.amount /(c.wage/30) dias,e.x_empleado_id,p.date_from,p.date_to
+				from public.hr_payslip_line a
+				inner join hr_contract c on a.contract_id = c.id 
+				inner join hr_employee e on e.id = c.employee_id
+				inner join public.hr_payslip p on p.id = a.slip_id
+				where code = '0230'
+				      and c.state = 'open') as s
+	 LOOP
+        resultado := public.add_absence_request(2,1,rec.x_empleado_id,rec.date_from,rec.date_to,'',rec.acumulado,'Vacaciones');
+        RAISE NOTICE 'Resultado para empleado ID %: %', rec.x_empleado_id, resultado.codid;
+		--PERFORM pg_sleep(1); -- Retardo de 1 segundo
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+
+select * from public.msterrorlog
+
+DO $$
+DECLARE
+    rec RECORD;
+    resultado RECORD;
+BEGIN
+    FOR rec IN select x_empleado_id,tipo,fechaini,fechafin,diassolicitados::numeric(10,2) acumulado
+				from dblink('odoo-remote',
+							'select contrato,tipo,fechaini,fechafin,diassolicitados
+							 from public.movimientovacaciones
+							 where origen = 4'
+					      ) AS s(contrato integer,tipo integer,fechaini date,fechafin date,diassolicitados numeric)
+				inner join hr_contract c on c.id = s.contrato
+				inner join hr_employee e on e.id = c.employee_id
+				where c.state = 'open'
+	 LOOP
+        resultado := public.add_absence_request(1,rec.tipo,rec.x_empleado_id,rec.fechaini,rec.fechafin,'',rec.acumulado,'Vacaciones');
+        RAISE NOTICE 'Resultado para empleado ID %: %', rec.x_empleado_id, resultado.codid;
+		--PERFORM pg_sleep(1); -- Retardo de 1 segundo
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
