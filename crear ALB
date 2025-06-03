@@ -1,0 +1,75 @@
+Paso 1: Crear Target Groups (Grupos de Destino)
+Los Target Groups son esenciales para agrupar tus instancias y permitir que el ALB las monitoree y envíe tráfico.
+
+Para operaciones.bussersa.com (Instancia 1):
+
+Nombre del Target Group: tg-operaciones
+Tipo de Target: Instance (si tus instancias están en EC2)
+Protocolo: HTTP o HTTPS (dependiendo de tu aplicación)
+Puerto: El puerto en el que tu aplicación se ejecuta en la Instancia 1 (comúnmente 80 u 443).
+VPC: Selecciona la VPC donde se encuentran tus instancias.
+Health Checks: Configura el path y el protocolo de los "health checks" para que el ALB pueda verificar la salud de la Instancia 1. Asegúrate de que este path responda 200 OK.
+Registrar Targets: Selecciona la Instancia 1 y el puerto apropiado, luego haz clic en "Include as pending below" y finalmente en "Register pending targets".
+Para admin.bussersa.com (Instancia 2):
+
+Nombre del Target Group: tg-admin
+Repite los pasos anteriores, seleccionando la Instancia 2 para este Target Group.
+Para helpdesk.bussersa.com y bussersa.com (Instancia 3):
+
+Nombre del Target Group: tg-helpdesk-bussersa
+Repite los pasos anteriores, seleccionando la Instancia 3 para este Target Group.
+Paso 2: Configurar el Listener del ALB
+El "Listener" del ALB es el punto de entrada para el tráfico y donde definirás las reglas para enrutar las solicitudes.
+
+Selecciona tu ALB existente.
+Ve a la pestaña "Listeners" y haz clic en "Add listener" (o edita el Listener existente si ya tienes uno, por ejemplo, en el puerto 80 o 443).
+Protocolo de Listener:
+Si solo usas HTTP, selecciona HTTP y puerto 80.
+Recomendado: Si planeas usar HTTPS, selecciona HTTPS y puerto 443. Necesitarás un certificado SSL/TLS en AWS Certificate Manager (ACM). Si no tienes uno, créalo y asócialo aquí.
+Acción por defecto: Para empezar, puedes establecer una acción por defecto que envíe el tráfico a un "Target Group" genérico (por ejemplo, a uno de tus Target Groups o a una página de error 404). Esta regla se aplicará si ninguna de las reglas con condiciones de host coincide.
+Paso 3: Añadir Reglas Basadas en el Nombre de Host
+Aquí es donde entra la magia del enrutamiento por nombre de host.
+
+Selecciona tu Listener (HTTPS:443 o HTTP:80).
+
+Haz clic en "View/edit rules".
+
+Haz clic en "Insert Rule" (o el signo + para añadir una nueva regla).
+
+Regla 1: Para operaciones.bussersa.com
+
+Condición (IF): Host header
+Valor del Host: operaciones.bussersa.com
+Acción (THEN): Forward to y selecciona el Target Group tg-operaciones.
+Arrastra esta regla al principio de la lista de reglas si es posible, o asegúrate de que esté antes de cualquier regla más genérica (como la regla por defecto).
+Regla 2: Para admin.bussersa.com
+
+Condición (IF): Host header
+Valor del Host: admin.bussersa.com
+Acción (THEN): Forward to y selecciona el Target Group tg-admin.
+Regla 3: Para helpdesk.bussersa.com
+
+Condición (IF): Host header
+Valor del Host: helpdesk.bussersa.com
+Acción (THEN): Forward to y selecciona el Target Group tg-helpdesk-bussersa.
+Regla 4: Para bussersa.com
+
+Condición (IF): Host header
+Valor del Host: bussersa.com
+Acción (THEN): Forward to y selecciona el Target Group tg-helpdesk-bussersa.
+Importante: Asegúrate de que esta regla esté después de la regla para helpdesk.bussersa.com si tienes alguna otra regla que pudiera coincidir con bussersa.com de forma más amplia. En este caso específico, el orden no es crítico entre estas dos porque la Instancia 3 recibe ambas.
+Paso 4: Configuración DNS
+Finalmente, asegúrate de que tus registros DNS apunten a tu ALB.
+
+En tu proveedor de DNS (Route 53 en AWS, GoDaddy, Cloudflare, etc.):
+Crea un registro A (o ALIAS si usas Route 53) para operaciones.bussersa.com que apunte al DNS Name de tu ALB.
+Crea un registro A (o ALIAS) para admin.bussersa.com que apunte al DNS Name de tu ALB.
+Crea un registro A (o ALIAS) para helpdesk.bussersa.com que apunte al DNS Name de tu ALB.
+Crea un registro A (o ALIAS) para bussersa.com que apunte al DNS Name de tu ALB.
+Consideraciones Adicionales:
+Certificados SSL/TLS: Si estás usando HTTPS, asegúrate de tener un certificado SSL/TLS válido para *.bussersa.com o certificados individuales para cada subdominio en AWS Certificate Manager (ACM) y asociarlo al Listener de tu ALB.
+Seguridad: Configura los Security Groups para tus instancias y el ALB. Las instancias deben permitir el tráfico desde el Security Group del ALB en los puertos de tu aplicación. El ALB debe permitir el tráfico de internet en los puertos 80 y/o 443.
+Health Checks: Monitoriza de cerca los "health checks" de tus Target Groups. Si una instancia falla los "health checks", el ALB dejará de enviarle tráfico.
+Path-based routing: Además del "Host-based routing", el ALB también soporta "Path-based routing", que te permite enrutar el tráfico basado en la URL (/admin, /operaciones, etc.). Para tu caso, el "Host-based routing" es el adecuado.
+Stickiness (Sesiones persistentes): Si tus aplicaciones requieren que un usuario se conecte a la misma instancia durante una sesión, puedes habilitar la "stickiness" en tus Target Groups.
+Prioridad de Reglas: En las reglas del Listener, el orden importa. Las reglas se evalúan de arriba hacia abajo. Asegúrate de que tus reglas específicas de nombre de host estén antes de cualquier regla más general.
