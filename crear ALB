@@ -1,3 +1,35 @@
+Opción 1: Crear Certificados SSL/TLS con AWS Certificate Manager (ACM) - Recomendado para ALBs
+AWS Certificate Manager (ACM) es el servicio preferido y más sencillo para obtener y gestionar certificados SSL/TLS en AWS, especialmente si los vas a usar con servicios como Application Load Balancers (ALB), CloudFront, API Gateway, etc. Los certificados de ACM son gratuitos para estos servicios y se renuevan automáticamente, lo que te ahorra mucho trabajo.
+
+Pasos para crear un certificado en ACM:
+
+Ingresar a la Consola de AWS: Inicia sesión en tu cuenta de AWS.
+Ir a Certificate Manager: Busca "Certificate Manager" en la barra de búsqueda y selecciona el servicio.
+Solicitar un certificado público:
+Haz clic en "Solicitar un certificado".
+Selecciona "Solicitar un certificado público" y haz clic en "Siguiente".
+Agregar Nombres de Dominio:
+Ingresa los nombres de dominio completos (FQDN) que deseas proteger. Para tu caso, necesitarías:
+operaciones.bussersa.com
+admin.bussersa.com
+helpdesk.bussersa.com
+bussersa.com
+Consejo: Para cubrir todos los subdominios y el dominio raíz, puedes solicitar un certificado wildcard como *.bussersa.com y bussersa.com. Esto cubrirá operaciones.bussersa.com, admin.bussersa.com, helpdesk.bussersa.com y cualquier otro subdominio, además del dominio raíz.
+Seleccionar el Método de Validación:
+Validación por DNS (Recomendado): ACM te proporcionará un registro CNAME que deberás añadir a la configuración DNS de tu dominio (en Route 53 si lo tienes allí, o en tu proveedor de DNS externo). Una vez que el registro CNAME se propaga y AWS lo verifica, el certificado se emite automáticamente. Esta es la opción más sencilla y la que permite la renovación automática.
+Validación por correo electrónico: ACM enviará correos electrónicos a los contactos administrativos del dominio listados en WHOIS. Deberás seguir las instrucciones en el correo para validar la propiedad.
+Elige "Validación por DNS" para la mayor automatización.
+Revisar y Solicitar: Revisa los detalles y haz clic en "Solicitar".
+Crear Registros en Route 53 (si aplicas): Si tu dominio está gestionado por AWS Route 53, ACM te dará la opción de crear automáticamente los registros CNAME necesarios en tu zona alojada de Route 53. Si tu DNS está con otro proveedor, deberás copiar los valores del CNAME y crearlos manualmente en tu proveedor de DNS.
+Esperar la Emisión: Una vez que los registros DNS se propaguen y ACM los valide, el estado del certificado cambiará a "Issued" (Emitido). Esto puede tardar unos minutos.
+Ventajas de ACM con ALB:
+
+Gratuito: Los certificados de ACM son gratuitos cuando se usan con servicios de AWS como ALB.
+Renovación Automática: ACM gestiona la renovación de tus certificados automáticamente, eliminando la necesidad de monitorear fechas de vencimiento y renovar manualmente.
+Fácil Integración: Se integra perfectamente con ALBs. Simplemente seleccionas el certificado de ACM al configurar el Listener HTTPS de tu ALB.
+Alta Disponibilidad: Los certificados de ACM se replican y están disponibles a nivel global para CloudFront y a nivel regional para ALBs.
+
+
 Paso 1: Crear Target Groups (Grupos de Destino)
 Los Target Groups son esenciales para agrupar tus instancias y permitir que el ALB las monitoree y envíe tráfico.
 
