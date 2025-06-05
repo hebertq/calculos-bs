@@ -105,3 +105,16 @@ Health Checks: Monitoriza de cerca los "health checks" de tus Target Groups. Si 
 Path-based routing: Además del "Host-based routing", el ALB también soporta "Path-based routing", que te permite enrutar el tráfico basado en la URL (/admin, /operaciones, etc.). Para tu caso, el "Host-based routing" es el adecuado.
 Stickiness (Sesiones persistentes): Si tus aplicaciones requieren que un usuario se conecte a la misma instancia durante una sesión, puedes habilitar la "stickiness" en tus Target Groups.
 Prioridad de Reglas: En las reglas del Listener, el orden importa. Las reglas se evalúan de arriba hacia abajo. Asegúrate de que tus reglas específicas de nombre de host estén antes de cualquier regla más general.
+
+_b45547ee1dade1cf30a631202596d063.api.bussersa.com.
+_6466ef58568728a10d3cb066a332c816.xlfgrmvvlj.acm-validations.aws..
+
+
+_790ac3962499ff56f1a77bd9fcd9d1fd.helpdesk.bussersa.com.
+_fea113bae35d17bec39f1beec31f1460.xlfgrmvvlj.acm-validations.aws..
+
+
+_71153dd531c08a10d8be5c40bd2bad96.admin.bussersa.com.
+_3e556f36f874882c2ccd5099350a868c.xlfgrmvvlj.acm-validations.aws.
+
+
